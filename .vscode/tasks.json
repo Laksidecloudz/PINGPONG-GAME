@@ -1,0 +1,25 @@
+{
+   "version": "2.0.0",
+   "tasks": [
+     {
+       "label": "build-pingpong",
+       "type": "shell",
+       "command": "C:/mingw64/bin/g++.exe",
+       "args": [
+         "-O2",
+         "-I\"C:/libs/SDL3-3.2.26/include\"",
+         "-I\"C:/libs/SDL3-3.2.26/include/SDL3\"",
+         "main.cpp", "Game.cpp", "Paddle.cpp", "Ball.cpp",
+         "-L\"C:/libs/SDL3-3.2.26/SDL3-devel-3.2.26-mingw/SDL3-3.2.26/x86_64-w64-mingw32/lib\"",
+         "-lSDL3",
+         "-lopengl32",
+         "-o", "PingPong.exe"
+       ],
+       "group": {
+         "kind": "build",
+         "isDefault": true
+       },
+       "problemMatcher": []
+     }
+   ]
+}

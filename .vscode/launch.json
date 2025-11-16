@@ -1,0 +1,45 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug PingPong",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/bin/PingPong.exe",
+      "args": [],
+      "cwd": "${workspaceFolder}/bin",
+      "stopAtEntry": false,
+      "environment": [],
+      "externalConsole": true,
+      "preLaunchTask": "build-pingpong",
+      "MIMode": "gdb",
+      "miDebuggerPath": "gdb",
+      "setupCommands": [
+        {
+          "description": "Enable pretty printing",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ]
+    },
+    {
+      "name": "C/C++ Runner: Debug Session",
+      "type": "cppdbg",
+      "request": "launch",
+      "args": [],
+      "stopAtEntry": false,
+      "externalConsole": true,
+      "cwd": "c:/Users/AkayG/Desktop/CODED GAME DESIGN PRACTICE/PINGPONG C++ GAME DESIGN EXERCISE/PINGPONG-GAME",
+      "program": "c:/Users/AkayG/Desktop/CODED GAME DESIGN PRACTICE/PINGPONG C++ GAME DESIGN EXERCISE/PINGPONG-GAME/build/Debug/outDebug",
+      "MIMode": "gdb",
+      "miDebuggerPath": "gdb",
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ]
+    }
+  ]
+}
