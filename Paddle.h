@@ -6,6 +6,7 @@ public:
     Paddle(float x, float y, int w, int h, float speed, SDL_Scancode up, SDL_Scancode down);
 
     void handleInput(const bool* keyState);
+    void setVerticalSpeed(float v);
     void move(double dt, int screenH);
     void render() const;
 

@@ -11,6 +11,10 @@ void Paddle::handleInput(const bool* keyState) {
     if (keyState[downKey]) vy += speed;
 }
 
+void Paddle::setVerticalSpeed(float v) {
+    vy = v;
+}
+
 void Paddle::move(double dt, int screenH) {
     y += vy * (float)dt;
     if (y < 0.0f) y = 0.0f;

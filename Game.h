@@ -20,6 +20,10 @@ private:
 private:
     int width, height;
     bool isRunning = false;
+    bool paused = false;
+    bool singlePlayer = false;
+    double labelTimer = 0.0;
+    int pauseSelection = 0;
 
     SDL_Window* window = nullptr;
     SDL_GLContext glContext = nullptr;
