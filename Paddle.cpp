@@ -21,8 +21,6 @@ void Paddle::move(double dt, int screenH) {
 }
 
 void Paddle::render() const {
-    glColor4f(0.9f, 0.9f, 0.95f, 1.0f);
-
     float zFront = -10.0f;
     float zBack  = 0.0f;
 
@@ -33,36 +31,42 @@ void Paddle::render() const {
 
     glBegin(GL_QUADS);
     // Front face
+    glColor4f(0.95f, 0.95f, 1.0f, 1.0f);
     glVertex3f(x0, y0, zFront);
     glVertex3f(x1, y0, zFront);
     glVertex3f(x1, y1, zFront);
     glVertex3f(x0, y1, zFront);
 
     // Back face
+    glColor4f(0.35f, 0.35f, 0.5f, 1.0f);
     glVertex3f(x0, y0, zBack);
     glVertex3f(x0, y1, zBack);
     glVertex3f(x1, y1, zBack);
     glVertex3f(x1, y0, zBack);
 
     // Left side
+    glColor4f(0.9f, 0.9f, 1.0f, 1.0f);
     glVertex3f(x0, y0, zBack);
     glVertex3f(x0, y0, zFront);
     glVertex3f(x0, y1, zFront);
     glVertex3f(x0, y1, zBack);
 
     // Right side
+    glColor4f(0.55f, 0.55f, 0.7f, 1.0f);
     glVertex3f(x1, y0, zFront);
     glVertex3f(x1, y0, zBack);
     glVertex3f(x1, y1, zBack);
     glVertex3f(x1, y1, zFront);
 
     // Top
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
     glVertex3f(x0, y0, zBack);
     glVertex3f(x1, y0, zBack);
     glVertex3f(x1, y0, zFront);
     glVertex3f(x0, y0, zFront);
 
     // Bottom
+    glColor4f(0.3f, 0.3f, 0.45f, 1.0f);
     glVertex3f(x0, y1, zFront);
     glVertex3f(x1, y1, zFront);
     glVertex3f(x1, y1, zBack);
