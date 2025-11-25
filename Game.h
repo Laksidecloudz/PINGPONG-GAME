@@ -20,9 +20,15 @@ private:
 private:
     int width, height;
     bool isRunning = false;
+    bool inStartScreen = true;
+    bool inMainMenu = false;
     bool paused = false;
     bool singlePlayer = false;
+    bool endlessMode = false;
+    int targetScore = 15;
+    bool gameOver = false;
     double labelTimer = 0.0;
+    double scoreFlashTimer = 0.0;
     int pauseSelection = 0;
 
     SDL_Window* window = nullptr;
@@ -34,6 +40,8 @@ private:
 
     int score1 = 0;
     int score2 = 0;
+    int lastScore1 = 0;
+    int lastScore2 = 0;
 
     Uint64 perfFreq = 0;
     Uint64 lastCounter = 0;
