@@ -283,7 +283,8 @@ bool Game::init() {
 
     glViewport(0, 0, width, height);
     glClearColor(0.06f, 0.07f, 0.10f, 1.0f);
-    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     resetProjection();
@@ -380,10 +381,10 @@ void Game::handleEvents() {
                                 paused = false;
                                 inMainMenu = false;
                             } else if (pauseSelection == 2) {
-                                // P1 VS P2 (PvP, no target score / endless)
+                                // P1 VS P2 (PvP, first to 15)
                                 singlePlayer = false;
                                 endlessMode = false;
-                                targetScore = 0; // 0 means no target
+                                targetScore = 15;
                                 gameOver = false;
                                 score1 = score2 = 0;
                                 paused = false;
@@ -423,10 +424,10 @@ void Game::handleEvents() {
                                 score1 = score2 = 0;
                                 paused = false;
                             } else if (pauseSelection == 3) {
-                                // P1 VS P2 (PvP, no target score / endless)
+                                // P1 VS P2 (PvP, first to 15)
                                 singlePlayer = false;
                                 endlessMode = false;
-                                targetScore = 0; // 0 means no target
+                                targetScore = 15;
                                 gameOver = false;
                                 score1 = score2 = 0;
                                 paused = false;
@@ -510,10 +511,13 @@ void Game::update(double dt) {
 }
 
 void Game::render() {
-    glClear(GL_COLOR_BUFFER_BIT);
-    glLoadIdentity();
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    // Start screen: pure 2D UI
     if (inStartScreen) {
+        resetProjection();
+        glLoadIdentity();
+
         glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 
         const char* title = "PINGPONG 3D";
@@ -533,33 +537,59 @@ void Game::render() {
         return;
     }
 
-    // Middle dashed line (optional visual)
+    // 3D world pass: perspective projection for center line, paddles, ball
+    glEnable(GL_DEPTH_TEST);
+
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    double zNear = 10.0;
+    double zFar = 2000.0;
+    double camZ = 800.0;
+    double halfW = width * 0.5;
+    double halfH = height * 0.5;
+    double ymax = halfH * zNear / camZ;
+    double ymin = -ymax;
+    double xmax = halfW * zNear / camZ;
+    double xmin = -xmax;
+    glFrustum(xmin, xmax, ymin, ymax, zNear, zFar);
+
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+    glTranslatef((float)-halfW, (float)-halfH, (float)-camZ);
+
+    // 3D middle dashed line
     glColor4f(1.0f, 1.0f, 1.0f, 0.25f);
     for (int y = 0; y < height; y += 30) {
-        glBegin(GL_QUADS);
         float mx = width * 0.5f - 2.0f;
-        glVertex2f(mx, (float)y);
-        glVertex2f(mx + 4.0f, (float)y);
-        glVertex2f(mx + 4.0f, (float)(y + 20));
-        glVertex2f(mx, (float)(y + 20));
+        float z = -5.0f;
+        glBegin(GL_QUADS);
+        glVertex3f(mx, (float)y, z);
+        glVertex3f(mx + 4.0f, (float)y, z);
+        glVertex3f(mx + 4.0f, (float)(y + 20), z);
+        glVertex3f(mx, (float)(y + 20), z);
         glEnd();
     }
 
-    // Entities
+    // 3D entities
     paddle1->render();
     paddle2->render();
     ball->render();
 
-if (paused) {
-    float alpha = inMainMenu ? 1.0f : 0.5f;  // opaque for main menu, translucent for pause
-    glColor4f(0.0f, 0.0f, 0.0f, alpha);
-    glBegin(GL_QUADS);
-    glVertex2f(0.0f, 0.0f);
-    glVertex2f((float)width, 0.0f);
-    glVertex2f((float)width, (float)height);
-    glVertex2f(0.0f, (float)height);
-    glEnd();
-}
+    // Switch to 2D for HUD and menus on top
+    glDisable(GL_DEPTH_TEST);
+    resetProjection();
+    glLoadIdentity();
+
+    if (paused) {
+        float alpha = inMainMenu ? 1.0f : 0.5f;  // opaque for main menu, translucent for pause
+        glColor4f(0.0f, 0.0f, 0.0f, alpha);
+        glBegin(GL_QUADS);
+        glVertex2f(0.0f, 0.0f);
+        glVertex2f((float)width, 0.0f);
+        glVertex2f((float)width, (float)height);
+        glVertex2f(0.0f, (float)height);
+        glEnd();
+    }
 
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 
@@ -596,23 +626,25 @@ if (paused) {
         // Mode label under the score
         char modeText[64];
 
-        if (endlessMode) {
-            if (singlePlayer) {
-                std::snprintf(modeText, sizeof(modeText), "MODE: ENDLESS VS AI");
+        if (singlePlayer) {
+            if (endlessMode) {
+                std::snprintf(modeText, sizeof(modeText), "ENDLESS MODE AI");
+            } else if (targetScore == 15) {
+                std::snprintf(modeText, sizeof(modeText), "FIRST TO 15 AI");
+            } else if (targetScore == 30) {
+                std::snprintf(modeText, sizeof(modeText), "FIRST TO 30 AI");
+            } else if (targetScore > 0) {
+                std::snprintf(modeText, sizeof(modeText), "FIRST TO %d AI", targetScore);
             } else {
-                std::snprintf(modeText, sizeof(modeText), "MODE: P1 VS P2");
-            }
-        } else if (targetScore > 0) {
-            if (singlePlayer) {
-                std::snprintf(modeText, sizeof(modeText), "MODE: FIRST TO %d (VS AI)", targetScore);
-            } else {
-                std::snprintf(modeText, sizeof(modeText), "MODE: FIRST TO %d (P1 VS P2)", targetScore);
+                std::snprintf(modeText, sizeof(modeText), "VS AI");
             }
         } else {
-            if (singlePlayer) {
-                std::snprintf(modeText, sizeof(modeText), "MODE: VS AI");
+            if (targetScore > 0) {
+                std::snprintf(modeText, sizeof(modeText), "FIRST TO %d PVP", targetScore);
+            } else if (endlessMode) {
+                std::snprintf(modeText, sizeof(modeText), "ENDLESS MODE PVP");
             } else {
-                std::snprintf(modeText, sizeof(modeText), "MODE: P1 VS P2");
+                std::snprintf(modeText, sizeof(modeText), "P1 VS P2");
             }
         }
 
@@ -728,7 +760,6 @@ if (paused) {
         }
     }
 
-    // TODO: draw scores with a text system (placeholder)
     // This skeleton omits text rendering. We'll add it later.
 }
 

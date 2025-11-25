@@ -89,10 +89,48 @@ void Ball::render() const {
     float top = y - radius;
     float size = (float)radius * 2.0f;
 
+    float x0 = left;
+    float x1 = left + size;
+    float y0 = top;
+    float y1 = top + size;
+    float zFront = -8.0f;
+    float zBack  = 0.0f;
+
     glBegin(GL_QUADS);
-    glVertex2f(left, top);
-    glVertex2f(left + size, top);
-    glVertex2f(left + size, top + size);
-    glVertex2f(left, top + size);
+    // Front face
+    glVertex3f(x0, y0, zFront);
+    glVertex3f(x1, y0, zFront);
+    glVertex3f(x1, y1, zFront);
+    glVertex3f(x0, y1, zFront);
+
+    // Back face
+    glVertex3f(x0, y0, zBack);
+    glVertex3f(x0, y1, zBack);
+    glVertex3f(x1, y1, zBack);
+    glVertex3f(x1, y0, zBack);
+
+    // Left side
+    glVertex3f(x0, y0, zBack);
+    glVertex3f(x0, y0, zFront);
+    glVertex3f(x0, y1, zFront);
+    glVertex3f(x0, y1, zBack);
+
+    // Right side
+    glVertex3f(x1, y0, zFront);
+    glVertex3f(x1, y0, zBack);
+    glVertex3f(x1, y1, zBack);
+    glVertex3f(x1, y1, zFront);
+
+    // Top
+    glVertex3f(x0, y0, zBack);
+    glVertex3f(x1, y0, zBack);
+    glVertex3f(x1, y0, zFront);
+    glVertex3f(x0, y0, zFront);
+
+    // Bottom
+    glVertex3f(x0, y1, zFront);
+    glVertex3f(x1, y1, zFront);
+    glVertex3f(x1, y1, zBack);
+    glVertex3f(x0, y1, zBack);
     glEnd();
 }
