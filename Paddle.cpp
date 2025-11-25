@@ -1,6 +1,5 @@
 #include "Paddle.h"
 #include "SDL3/SDL_opengl.h"
-#include <algorithm>
 
 Paddle::Paddle(float x_, float y_, int w, int h, float speed_, SDL_Scancode up, SDL_Scancode down)
     : x(x_), y(y_), width(w), height(h), speed(speed_), upKey(up), downKey(down) {}

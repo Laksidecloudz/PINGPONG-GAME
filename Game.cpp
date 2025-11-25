@@ -6,6 +6,7 @@
 #include "SDL3/SDL_opengl.h"
 #include <cstdio>
 #include <cmath>
+#include <cstdlib>
 
 static void drawChar(float x, float y, float scale, char c) {
     float s = scale;
@@ -256,6 +257,8 @@ bool Game::init() {
         std::fprintf(stderr, "SDL_Init failed err='%s'\n", err ? err : "<null>");
         return false;
     }
+
+    std::srand((unsigned int)SDL_GetPerformanceCounter());
 
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
@@ -515,6 +518,7 @@ void Game::render() {
 
     // Start screen: pure 2D UI
     if (inStartScreen) {
+        glDisable(GL_DEPTH_TEST);
         resetProjection();
         glLoadIdentity();
 
@@ -759,8 +763,6 @@ void Game::render() {
             }
         }
     }
-
-    // This skeleton omits text rendering. We'll add it later.
 }
 
 void Game::run() {

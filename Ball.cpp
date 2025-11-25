@@ -2,7 +2,7 @@
 #include "Paddle.h"
 #include "SDL3/SDL_opengl.h"
 #include <cmath>
-#include <algorithm>
+#include <cstdlib>
 
 static inline bool aabbOverlap(float ax, float ay, float aw, float ah,
                                float bx, float by, float bw, float bh) {
