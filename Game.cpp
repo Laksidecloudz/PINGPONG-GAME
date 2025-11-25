@@ -616,6 +616,25 @@ void Game::render() {
         baseB2 = 0.04f;
     }
 
+    float rally = 0.0f;
+    if (ball) {
+        rally = ball->rallyEnergy;
+        if (rally < 0.0f) rally = 0.0f;
+        if (rally > 1.0f) rally = 1.0f;
+    }
+
+    float scorePulse = 0.0f;
+    if (scoreFlashTimer > 0.0) {
+        scorePulse = (float)(scoreFlashTimer / 0.3f);
+        if (scorePulse > 1.0f) scorePulse = 1.0f;
+    }
+
+    float accentBoost = 1.0f + 0.25f * rally + 0.25f * scorePulse;
+    if (accentBoost > 1.5f) accentBoost = 1.5f;
+    accentR *= accentBoost;
+    accentG *= accentBoost;
+    accentB *= accentBoost;
+
     if (fxEnabled) {
         float zFloor = -6.0f;
         glBegin(GL_QUADS);

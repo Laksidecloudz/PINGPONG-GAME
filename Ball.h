@@ -17,5 +17,10 @@ public:
     float x, y;
     float velX, velY;
     float trailBoost;
+    float rallyEnergy;
+    float leftImpactTimer;
+    float rightImpactTimer;
+    float topImpactTimer;
+    float bottomImpactTimer;
     int radius;
 };

@@ -10,12 +10,19 @@ static inline bool aabbOverlap(float ax, float ay, float aw, float ah,
 }
 
 Ball::Ball(float x_, float y_, float vx, float vy, int r)
-    : x(x_), y(y_), velX(vx), velY(vy), trailBoost(0.0f), radius(r) {}
+    : x(x_), y(y_), velX(vx), velY(vy), trailBoost(0.0f), rallyEnergy(0.0f),
+      leftImpactTimer(0.0f), rightImpactTimer(0.0f), topImpactTimer(0.0f), bottomImpactTimer(0.0f),
+      radius(r) {}
 
 void Ball::reset(float cx, float cy) {
     x = cx;
     y = cy;
     trailBoost = 0.0f;
+    rallyEnergy = 0.0f;
+    leftImpactTimer = 0.0f;
+    rightImpactTimer = 0.0f;
+    topImpactTimer = 0.0f;
+    bottomImpactTimer = 0.0f;
     // Randomize initial direction slightly
     float dirX = (std::rand() % 2 == 0) ? 1.0f : -1.0f;
     float dirY = ((std::rand() % 100) / 100.0f) * 2.0f - 1.0f;
@@ -35,13 +42,41 @@ void Ball::update(double dt, int screenW, int screenH,
         if (trailBoost < 0.0f) trailBoost = 0.0f;
     }
 
+    if (rallyEnergy > 0.0f) {
+        rallyEnergy -= (float)dt * 0.3f;
+        if (rallyEnergy < 0.0f) rallyEnergy = 0.0f;
+    }
+
+    if (leftImpactTimer > 0.0f) {
+        leftImpactTimer -= (float)dt;
+        if (leftImpactTimer < 0.0f) leftImpactTimer = 0.0f;
+    }
+    if (rightImpactTimer > 0.0f) {
+        rightImpactTimer -= (float)dt;
+        if (rightImpactTimer < 0.0f) rightImpactTimer = 0.0f;
+    }
+    if (topImpactTimer > 0.0f) {
+        topImpactTimer -= (float)dt;
+        if (topImpactTimer < 0.0f) topImpactTimer = 0.0f;
+    }
+    if (bottomImpactTimer > 0.0f) {
+        bottomImpactTimer -= (float)dt;
+        if (bottomImpactTimer < 0.0f) bottomImpactTimer = 0.0f;
+    }
+
     // Top/bottom walls
     if (y - radius <= 0.0f) {
         y = (float)radius;
         velY = -velY;
+        rallyEnergy += 0.15f;
+        if (rallyEnergy > 1.0f) rallyEnergy = 1.0f;
+        topImpactTimer = 0.12f;
     } else if (y + radius >= (float)screenH) {
         y = (float)screenH - radius;
         velY = -velY;
+        rallyEnergy += 0.15f;
+        if (rallyEnergy > 1.0f) rallyEnergy = 1.0f;
+        bottomImpactTimer = 0.12f;
     }
 
     // Scoring: left/right bounds
@@ -69,6 +104,9 @@ void Ball::update(double dt, int screenW, int screenH,
         velY = hitPos * speed;
 
         trailBoost = 1.0f;
+        rallyEnergy += 0.3f;
+        if (rallyEnergy > 1.0f) rallyEnergy = 1.0f;
+        leftImpactTimer = 0.12f;
 
         // Nudge outside to avoid sticking
         x = p1.x + p1.width + radius + 0.5f;
@@ -89,6 +127,9 @@ void Ball::update(double dt, int screenW, int screenH,
         // Nudge outside
         x = p2.x - radius - 0.5f;
         trailBoost = 1.0f;
+        rallyEnergy += 0.3f;
+        if (rallyEnergy > 1.0f) rallyEnergy = 1.0f;
+        rightImpactTimer = 0.12f;
     }
 }
 
