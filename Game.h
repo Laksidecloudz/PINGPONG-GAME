@@ -25,6 +25,7 @@ private:
     bool paused = false;
     bool singlePlayer = false;
     bool endlessMode = false;
+    bool fxEnabled = true;
     int targetScore = 15;
     bool gameOver = false;
     double labelTimer = 0.0;

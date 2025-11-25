@@ -29,6 +29,8 @@ void Paddle::render() const {
     float y0 = y;
     float y1 = y + height;
 
+    bool isLeftPaddle = (upKey == SDL_SCANCODE_W);
+
     glBegin(GL_QUADS);
     // Front face
     glColor4f(0.95f, 0.95f, 1.0f, 1.0f);
@@ -45,14 +47,26 @@ void Paddle::render() const {
     glVertex3f(x1, y0, zBack);
 
     // Left side
-    glColor4f(0.9f, 0.9f, 1.0f, 1.0f);
+    if (isLeftPaddle) {
+        // Outer side on the left paddle: slightly darker
+        glColor4f(0.55f, 0.55f, 0.7f, 1.0f);
+    } else {
+        // Inner side on the right paddle (toward center): brighter
+        glColor4f(0.9f, 0.9f, 1.0f, 1.0f);
+    }
     glVertex3f(x0, y0, zBack);
     glVertex3f(x0, y0, zFront);
     glVertex3f(x0, y1, zFront);
     glVertex3f(x0, y1, zBack);
 
     // Right side
-    glColor4f(0.55f, 0.55f, 0.7f, 1.0f);
+    if (isLeftPaddle) {
+        // Inner side on the left paddle (toward center): brighter
+        glColor4f(0.9f, 0.9f, 1.0f, 1.0f);
+    } else {
+        // Outer side on the right paddle: slightly darker
+        glColor4f(0.55f, 0.55f, 0.7f, 1.0f);
+    }
     glVertex3f(x1, y0, zFront);
     glVertex3f(x1, y0, zBack);
     glVertex3f(x1, y1, zBack);

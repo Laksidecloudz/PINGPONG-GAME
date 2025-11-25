@@ -16,5 +16,6 @@ public:
 public:
     float x, y;
     float velX, velY;
+    float trailBoost;
     int radius;
 };

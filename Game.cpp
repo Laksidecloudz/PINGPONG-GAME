@@ -354,109 +354,116 @@ void Game::handleEvents() {
                         }
                         labelTimer = 0.0;
                     }
-                } else if (paused) {
-                    // Pause/main menu navigation
-                    const int menuItems = inMainMenu ? 5 : 6;
-                    if (sc == SDL_SCANCODE_UP) {
-                        pauseSelection = (pauseSelection - 1 + menuItems) % menuItems;
-                    } else if (sc == SDL_SCANCODE_DOWN) {
-                        pauseSelection = (pauseSelection + 1) % menuItems;
-                    } else if (sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_KP_ENTER) {
-                        // Apply menu selection
-                        if (inMainMenu) {
-                            // Opening main menu: no RESUME option
-                            if (pauseSelection == 0) {
-                                // FIRST TO 15 (P1 vs AI)
-                                singlePlayer = true;
-                                endlessMode = false;
-                                targetScore = 15;
-                                gameOver = false;
-                                score1 = score2 = 0;
-                                paused = false;
-                                inMainMenu = false;
-                            } else if (pauseSelection == 1) {
-                                // FIRST TO 30 (P1 vs AI)
-                                singlePlayer = true;
-                                endlessMode = false;
-                                targetScore = 30;
-                                gameOver = false;
-                                score1 = score2 = 0;
-                                paused = false;
-                                inMainMenu = false;
-                            } else if (pauseSelection == 2) {
-                                // P1 VS P2 (PvP, first to 15)
-                                singlePlayer = false;
-                                endlessMode = false;
-                                targetScore = 15;
-                                gameOver = false;
-                                score1 = score2 = 0;
-                                paused = false;
-                                inMainMenu = false;
-                            } else if (pauseSelection == 3) {
-                                // ENDLESS MODE (P1 vs AI, no target)
-                                singlePlayer = true;
-                                endlessMode = true;
-                                targetScore = 0;
-                                gameOver = false;
-                                score1 = score2 = 0;
-                                paused = false;
-                                inMainMenu = false;
-                            } else if (pauseSelection == 4) {
-                                // QUIT from main menu
-                                isRunning = false;
-                            }
-                        } else {
-                            // In-game pause / game-over menu
-                            if (pauseSelection == 0) {
-                                // RESUME (only meaningful in-game)
-                                paused = false;
-                            } else if (pauseSelection == 1) {
-                                // FIRST TO 15 (P1 vs AI)
-                                singlePlayer = true;
-                                endlessMode = false;
-                                targetScore = 15;
-                                gameOver = false;
-                                score1 = score2 = 0;
-                                paused = false;
-                            } else if (pauseSelection == 2) {
-                                // FIRST TO 30 (P1 vs AI)
-                                singlePlayer = true;
-                                endlessMode = false;
-                                targetScore = 30;
-                                gameOver = false;
-                                score1 = score2 = 0;
-                                paused = false;
-                            } else if (pauseSelection == 3) {
-                                // P1 VS P2 (PvP, first to 15)
-                                singlePlayer = false;
-                                endlessMode = false;
-                                targetScore = 15;
-                                gameOver = false;
-                                score1 = score2 = 0;
-                                paused = false;
-                            } else if (pauseSelection == 4) {
-                                // ENDLESS MODE (P1 vs AI, no target)
-                                singlePlayer = true;
-                                endlessMode = true;
-                                targetScore = 0;
-                                gameOver = false;
-                                score1 = score2 = 0;
-                                paused = false;
-                            } else if (pauseSelection == 5) {
-                                // QUIT from pause menu
-                                isRunning = false;
-                            }
-                        }
-                        labelTimer = 0.0;
-                    }
                 } else {
-                    // Unpaused gameplay keys
-                    if (sc == SDL_SCANCODE_P) {
-                        paused = !paused;
-                        if (paused) {
-                            pauseSelection = 0;
+                    SDL_Keymod mods = SDL_GetModState();
+                    bool ctrlDown = (mods & SDL_KMOD_CTRL) != 0;
+                    if (ctrlDown && sc == SDL_SCANCODE_0) {
+                        fxEnabled = !fxEnabled;
+                    } else if (paused) {
+                        // Pause/main menu navigation
+                        const int menuItems = inMainMenu ? 5 : 7;
+                        if (sc == SDL_SCANCODE_UP) {
+                            pauseSelection = (pauseSelection - 1 + menuItems) % menuItems;
+                        } else if (sc == SDL_SCANCODE_DOWN) {
+                            pauseSelection = (pauseSelection + 1) % menuItems;
+                        } else if (sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_KP_ENTER) {
+                            // Apply menu selection
+                            if (inMainMenu) {
+                                // Opening main menu: no RESUME option
+                                if (pauseSelection == 0) {
+                                    // FIRST TO 15 (P1 vs AI)
+                                    singlePlayer = true;
+                                    endlessMode = false;
+                                    targetScore = 15;
+                                    gameOver = false;
+                                    score1 = score2 = 0;
+                                    paused = false;
+                                    inMainMenu = false;
+                                } else if (pauseSelection == 1) {
+                                    // FIRST TO 30 (P1 vs AI)
+                                    singlePlayer = true;
+                                    endlessMode = false;
+                                    targetScore = 30;
+                                    gameOver = false;
+                                    score1 = score2 = 0;
+                                    paused = false;
+                                    inMainMenu = false;
+                                } else if (pauseSelection == 2) {
+                                    // P1 VS P2 (PvP, first to 15)
+                                    singlePlayer = false;
+                                    endlessMode = false;
+                                    targetScore = 15;
+                                    gameOver = false;
+                                    score1 = score2 = 0;
+                                    paused = false;
+                                    inMainMenu = false;
+                                } else if (pauseSelection == 3) {
+                                    // ENDLESS MODE (P1 vs AI, no target)
+                                    singlePlayer = true;
+                                    endlessMode = true;
+                                    targetScore = 0;
+                                    gameOver = false;
+                                    score1 = score2 = 0;
+                                    paused = false;
+                                    inMainMenu = false;
+                                } else if (pauseSelection == 4) {
+                                    // QUIT from main menu
+                                    isRunning = false;
+                                }
+                            } else {
+                                // In-game pause / game-over menu
+                                if (pauseSelection == 0) {
+                                    // RESUME (only meaningful in-game)
+                                    paused = false;
+                                } else if (pauseSelection == 1) {
+                                    // FIRST TO 15 (P1 vs AI)
+                                    singlePlayer = true;
+                                    endlessMode = false;
+                                    targetScore = 15;
+                                    gameOver = false;
+                                    score1 = score2 = 0;
+                                    paused = false;
+                                } else if (pauseSelection == 2) {
+                                    // FIRST TO 30 (P1 vs AI)
+                                    singlePlayer = true;
+                                    endlessMode = false;
+                                    targetScore = 30;
+                                    gameOver = false;
+                                    score1 = score2 = 0;
+                                    paused = false;
+                                } else if (pauseSelection == 3) {
+                                    // P1 VS P2 (PvP, first to 15)
+                                    singlePlayer = false;
+                                    endlessMode = false;
+                                    targetScore = 15;
+                                    gameOver = false;
+                                    score1 = score2 = 0;
+                                    paused = false;
+                                } else if (pauseSelection == 4) {
+                                    // ENDLESS MODE (P1 vs AI, no target)
+                                    singlePlayer = true;
+                                    endlessMode = true;
+                                    targetScore = 0;
+                                    gameOver = false;
+                                    score1 = score2 = 0;
+                                    paused = false;
+                                } else if (pauseSelection == 5) {
+                                    fxEnabled = !fxEnabled;
+                                } else if (pauseSelection == 6) {
+                                    // QUIT from pause menu
+                                    isRunning = false;
+                                }
+                            }
+                            labelTimer = 0.0;
                         }
-                        labelTimer = 0.0;
+                    } else {
+                        if (sc == SDL_SCANCODE_P) {
+                            paused = !paused;
+                            if (paused) {
+                                pauseSelection = 0;
+                            }
+                            labelTimer = 0.0;
+                        }
                     }
                 }
             }
@@ -560,9 +567,73 @@ void Game::render() {
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
     glTranslatef((float)-halfW, (float)-halfH, (float)-camZ);
+ 
+    float baseR = 0.02f;
+    float baseG = 0.03f;
+    float baseB = 0.06f;
+    float baseR2 = 0.0f;
+    float baseG2 = 0.0f;
+    float baseB2 = 0.04f;
+    float accentR = 0.3f;
+    float accentG = 0.8f;
+    float accentB = 1.0f;
+
+    if (singlePlayer) {
+        if (endlessMode) {
+            accentR = 0.1f;
+            accentG = 0.9f;
+            accentB = 0.6f;
+        } else if (targetScore >= 30) {
+            accentR = 0.2f;
+            accentG = 0.7f;
+            accentB = 1.0f;
+        } else {
+            accentR = 0.4f;
+            accentG = 0.7f;
+            accentB = 1.0f;
+        }
+        baseR = 0.02f;
+        baseG = 0.03f;
+        baseB = 0.08f;
+        baseR2 = 0.0f;
+        baseG2 = 0.0f;
+        baseB2 = 0.05f;
+    } else {
+        if (endlessMode) {
+            accentR = 1.0f;
+            accentG = 0.3f;
+            accentB = 0.7f;
+        } else {
+            accentR = 1.0f;
+            accentG = 0.4f;
+            accentB = 0.3f;
+        }
+        baseR = 0.04f;
+        baseG = 0.02f;
+        baseB = 0.07f;
+        baseR2 = 0.01f;
+        baseG2 = 0.0f;
+        baseB2 = 0.04f;
+    }
+
+    if (fxEnabled) {
+        float zFloor = -6.0f;
+        glBegin(GL_QUADS);
+        glColor4f(baseR, baseG, baseB, 1.0f);
+        glVertex3f(0.0f, 0.0f, zFloor);
+        glVertex3f((float)width, 0.0f, zFloor);
+        glColor4f(baseR2, baseG2, baseB2, 1.0f);
+        glVertex3f((float)width, (float)height, zFloor);
+        glVertex3f(0.0f, (float)height, zFloor);
+        glEnd();
+    }
 
     // 3D middle dashed line
-    glColor4f(1.0f, 1.0f, 1.0f, 0.25f);
+    if (fxEnabled) {
+        glColor4f(accentR, accentG, accentB, 0.3f);
+    } else {
+        glColor4f(1.0f, 1.0f, 1.0f, 0.25f);
+    }
     for (int y = 0; y < height; y += 30) {
         float mx = width * 0.5f - 2.0f;
         float z = -5.0f;
@@ -571,6 +642,46 @@ void Game::render() {
         glVertex3f(mx + 4.0f, (float)y, z);
         glVertex3f(mx + 4.0f, (float)(y + 20), z);
         glVertex3f(mx, (float)(y + 20), z);
+        glEnd();
+    }
+
+    if (fxEnabled) {
+        float zShadow = -4.9f;
+
+        glBegin(GL_QUADS);
+        glColor4f(0.0f, 0.0f, 0.0f, 0.35f);
+        float p1x0 = paddle1->x;
+        float p1x1 = paddle1->x + paddle1->width;
+        float p1y0 = paddle1->y;
+        float p1y1 = paddle1->y + paddle1->height;
+        glVertex3f(p1x0, p1y0, zShadow);
+        glVertex3f(p1x1, p1y0, zShadow);
+        glVertex3f(p1x1, p1y1, zShadow);
+        glVertex3f(p1x0, p1y1, zShadow);
+        glEnd();
+
+        glBegin(GL_QUADS);
+        glColor4f(0.0f, 0.0f, 0.0f, 0.35f);
+        float p2x0 = paddle2->x;
+        float p2x1 = paddle2->x + paddle2->width;
+        float p2y0 = paddle2->y;
+        float p2y1 = paddle2->y + paddle2->height;
+        glVertex3f(p2x0, p2y0, zShadow);
+        glVertex3f(p2x1, p2y0, zShadow);
+        glVertex3f(p2x1, p2y1, zShadow);
+        glVertex3f(p2x0, p2y1, zShadow);
+        glEnd();
+
+        glBegin(GL_QUADS);
+        glColor4f(0.0f, 0.0f, 0.0f, 0.35f);
+        float bx0 = ball->x - ball->radius;
+        float bx1 = ball->x + ball->radius;
+        float by0 = ball->y - ball->radius;
+        float by1 = ball->y + ball->radius;
+        glVertex3f(bx0, by0, zShadow);
+        glVertex3f(bx1, by0, zShadow);
+        glVertex3f(bx1, by1, zShadow);
+        glVertex3f(bx0, by1, zShadow);
         glEnd();
     }
 
@@ -583,6 +694,75 @@ void Game::render() {
     glDisable(GL_DEPTH_TEST);
     resetProjection();
     glLoadIdentity();
+
+    if (fxEnabled) {
+        float centerX = (float)width * 0.5f;
+        float centerGlowWidth = 140.0f;
+        float centerGlowHalf = centerGlowWidth * 0.5f;
+        float glowTop = 0.0f;
+        float glowBottom = (float)height;
+
+        glBegin(GL_QUADS);
+        glColor4f(accentR * 0.0f, accentG * 0.0f, accentB * 0.0f, 0.0f);
+        glVertex2f(centerX - centerGlowHalf, glowTop);
+        glVertex2f(centerX + centerGlowHalf, glowTop);
+        glColor4f(accentR * 0.6f, accentG * 0.6f, accentB * 0.7f, 0.55f);
+        glVertex2f(centerX + centerGlowHalf, glowBottom);
+        glVertex2f(centerX - centerGlowHalf, glowBottom);
+        glEnd();
+
+        if (ball) {
+            float vx = ball->velX;
+            float vy = ball->velY;
+            float speed = std::sqrt(vx * vx + vy * vy);
+            if (speed > 1.0f) {
+                float nx = vx / speed;
+                float ny = vy / speed;
+                float boost = ball->trailBoost;
+                if (boost < 0.0f) boost = 0.0f;
+                if (boost > 1.0f) boost = 1.0f;
+                float tailLength = (float)ball->radius * (5.0f + 3.0f * boost);
+                float halfWidth = (float)ball->radius * 0.6f;
+
+                float startOffset = (float)ball->radius * 1.0f;
+                float hx = ball->x - nx * startOffset;
+                float hy = ball->y - ny * startOffset;
+                float tx = hx - nx * tailLength;
+                float ty = hy - ny * tailLength;
+
+                float px = -ny;
+                float py = nx;
+
+                float ax = hx + px * halfWidth;
+                float ay = hy + py * halfWidth;
+                float bx = hx - px * halfWidth;
+                float by = hy - py * halfWidth;
+                float cx = tx + px * halfWidth * 0.3f;
+                float cy = ty + py * halfWidth * 0.3f;
+                float dx = tx - px * halfWidth * 0.3f;
+                float dy = ty - py * halfWidth * 0.3f;
+
+                float headR = accentR * (0.9f + 0.3f * boost);
+                float headG = accentG * (0.9f + 0.3f * boost);
+                float headB = accentB * (0.9f + 0.3f * boost);
+                float tailR = accentR * 0.4f;
+                float tailG = accentG * 0.4f;
+                float tailB = accentB * 0.4f;
+
+                float headA = 0.5f + 0.25f * boost;
+                if (headA > 0.8f) headA = 0.8f;
+
+                glBegin(GL_QUADS);
+                glColor4f(headR, headG, headB, headA);
+                glVertex2f(ax, ay);
+                glVertex2f(bx, by);
+                glColor4f(tailR, tailG, tailB, 0.0f);
+                glVertex2f(dx, dy);
+                glVertex2f(cx, cy);
+                glEnd();
+            }
+        }
+    }
 
     if (paused) {
         float alpha = inMainMenu ? 1.0f : 0.5f;  // opaque for main menu, translucent for pause
@@ -621,7 +801,10 @@ void Game::render() {
             scoreScale = baseScoreScale + 4.0f * t;
             glColor4f(1.0f, 1.0f, 0.4f, 1.0f);
         } else {
-            glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+            float sr = accentR * 0.6f + 0.4f;
+            float sg = accentG * 0.6f + 0.4f;
+            float sb = accentB * 0.6f + 0.4f;
+            glColor4f(sr, sg, sb, 1.0f);
         }
 
         float scoreWidth = measureText(scoreScale, scoreText);
@@ -658,7 +841,10 @@ void Game::render() {
         float modeWidth = measureText(modeScale, modeText);
         float modeX = (float)width * 0.5f - modeWidth * 0.5f;
         float modeY = scoreY + baseScoreScale * 1.4f;
-        glColor4f(0.8f, 0.9f, 1.0f, 1.0f);
+        float mr = accentR * 0.8f + 0.2f;
+        float mg = accentG * 0.8f + 0.2f;
+        float mb = accentB * 0.8f + 0.2f;
+        glColor4f(mr, mg, mb, 1.0f);
         drawText(modeX, modeY, modeScale, modeText);
 
         // Player labels near paddles
@@ -738,20 +924,28 @@ void Game::render() {
                 }
             }
 
-            const char* items[6] = {
+            const char* items[7] = {
                 "RESUME",
                 "FIRST TO 15",
                 "FIRST TO 30",
                 "P1 VS P2",
                 "ENDLESS MODE",
+                nullptr,
                 "QUIT"
             };
 
             float menuScale = 18.0f;
             float startY = y + pausedScale * (gameOver ? 2.4f : 1.8f);
 
-            for (int i = 0; i < 6; ++i) {
-                float w = measureText(menuScale, items[i]);
+            for (int i = 0; i < 7; ++i) {
+                const char* label = items[i];
+                char fxLabel[32];
+                if (i == 5) {
+                    std::snprintf(fxLabel, sizeof(fxLabel), fxEnabled ? "VISUAL FX: ON" : "VISUAL FX: OFF");
+                    label = fxLabel;
+                }
+
+                float w = measureText(menuScale, label);
                 float ix = (float)width * 0.5f - w * 0.5f;
                 float iy = startY + i * (menuScale * 1.4f);
 
@@ -761,7 +955,7 @@ void Game::render() {
                     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
                 }
 
-                drawText(ix, iy, menuScale, items[i]);
+                drawText(ix, iy, menuScale, label);
             }
         }
     }

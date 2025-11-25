@@ -10,11 +10,12 @@ static inline bool aabbOverlap(float ax, float ay, float aw, float ah,
 }
 
 Ball::Ball(float x_, float y_, float vx, float vy, int r)
-    : x(x_), y(y_), velX(vx), velY(vy), radius(r) {}
+    : x(x_), y(y_), velX(vx), velY(vy), trailBoost(0.0f), radius(r) {}
 
 void Ball::reset(float cx, float cy) {
     x = cx;
     y = cy;
+    trailBoost = 0.0f;
     // Randomize initial direction slightly
     float dirX = (std::rand() % 2 == 0) ? 1.0f : -1.0f;
     float dirY = ((std::rand() % 100) / 100.0f) * 2.0f - 1.0f;
@@ -28,6 +29,11 @@ void Ball::update(double dt, int screenW, int screenH,
                   int& score1, int& score2) {
     x += velX * (float)dt;
     y += velY * (float)dt;
+
+    if (trailBoost > 0.0f) {
+        trailBoost -= (float)dt * 1.5f;
+        if (trailBoost < 0.0f) trailBoost = 0.0f;
+    }
 
     // Top/bottom walls
     if (y - radius <= 0.0f) {
@@ -62,6 +68,8 @@ void Ball::update(double dt, int screenW, int screenH,
         velX = std::fabs(speed * 0.9f);
         velY = hitPos * speed;
 
+        trailBoost = 1.0f;
+
         // Nudge outside to avoid sticking
         x = p1.x + p1.width + radius + 0.5f;
     }
@@ -80,6 +88,7 @@ void Ball::update(double dt, int screenW, int screenH,
 
         // Nudge outside
         x = p2.x - radius - 0.5f;
+        trailBoost = 1.0f;
     }
 }
 
