@@ -555,7 +555,7 @@ void Game::render() {
     double ymin = -ymax;
     double xmax = halfW * zNear / camZ;
     double xmin = -xmax;
-    glFrustum(xmin, xmax, ymin, ymax, zNear, zFar);
+    glFrustum(xmin, xmax, ymax, ymin, zNear, zFar);
 
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
@@ -602,9 +602,11 @@ void Game::render() {
         float topY = 30.0f;
 
         // Control hints
-        glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
-        drawText(40.0f, topY, 12.0f, "P1: W/S");
-        drawText((float)width - 200.0f, topY, 12.0f, "P2: UP/DOWN");
+        if (labelTimer < 3.0) {
+            glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+            drawText(40.0f, topY, 12.0f, "P1: W/S");
+            drawText((float)width - 200.0f, topY, 12.0f, "P2: UP/DOWN");
+        }
 
         // Scores centered at top, with a brief flash when score changes
         char scoreText[32];
