@@ -16,6 +16,10 @@ public:
     float speed;
     SDL_Scancode upKey, downKey;
 
+    float colorR;
+    float colorG;
+    float colorB;
+
 private:
     float vy = 0.0f;
 };

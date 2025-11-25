@@ -2,7 +2,11 @@
 #include "SDL3/SDL_opengl.h"
 
 Paddle::Paddle(float x_, float y_, int w, int h, float speed_, SDL_Scancode up, SDL_Scancode down)
-    : x(x_), y(y_), width(w), height(h), speed(speed_), upKey(up), downKey(down) {}
+    : x(x_), y(y_), width(w), height(h), speed(speed_), upKey(up), downKey(down) {
+    colorR = 0.95f;
+    colorG = 0.95f;
+    colorB = 1.0f;
+}
 
 void Paddle::handleInput(const bool* keyState) {
     vy = 0.0f;
@@ -31,16 +35,28 @@ void Paddle::render() const {
 
     bool isLeftPaddle = (upKey == SDL_SCANCODE_W);
 
+    float br = colorR;
+    float bg = colorG;
+    float bb = colorB;
+
+    float dr = colorR * 0.4f;
+    float dg = colorG * 0.4f;
+    float db = colorB * 0.5f;
+
+    float mr = colorR * 0.7f;
+    float mg = colorG * 0.7f;
+    float mb = colorB * 0.8f;
+
     glBegin(GL_QUADS);
     // Front face
-    glColor4f(0.95f, 0.95f, 1.0f, 1.0f);
+    glColor4f(br, bg, bb, 1.0f);
     glVertex3f(x0, y0, zFront);
     glVertex3f(x1, y0, zFront);
     glVertex3f(x1, y1, zFront);
     glVertex3f(x0, y1, zFront);
 
     // Back face
-    glColor4f(0.35f, 0.35f, 0.5f, 1.0f);
+    glColor4f(dr, dg, db, 1.0f);
     glVertex3f(x0, y0, zBack);
     glVertex3f(x0, y1, zBack);
     glVertex3f(x1, y1, zBack);
@@ -49,10 +65,10 @@ void Paddle::render() const {
     // Left side
     if (isLeftPaddle) {
         // Outer side on the left paddle: slightly darker
-        glColor4f(0.55f, 0.55f, 0.7f, 1.0f);
+        glColor4f(dr, dg, db, 1.0f);
     } else {
         // Inner side on the right paddle (toward center): brighter
-        glColor4f(0.9f, 0.9f, 1.0f, 1.0f);
+        glColor4f(br, bg, bb, 1.0f);
     }
     glVertex3f(x0, y0, zBack);
     glVertex3f(x0, y0, zFront);
@@ -62,10 +78,10 @@ void Paddle::render() const {
     // Right side
     if (isLeftPaddle) {
         // Inner side on the left paddle (toward center): brighter
-        glColor4f(0.9f, 0.9f, 1.0f, 1.0f);
+        glColor4f(br, bg, bb, 1.0f);
     } else {
         // Outer side on the right paddle: slightly darker
-        glColor4f(0.55f, 0.55f, 0.7f, 1.0f);
+        glColor4f(dr, dg, db, 1.0f);
     }
     glVertex3f(x1, y0, zFront);
     glVertex3f(x1, y0, zBack);
@@ -73,14 +89,14 @@ void Paddle::render() const {
     glVertex3f(x1, y1, zFront);
 
     // Top
-    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+    glColor4f(mr, mg, mb, 1.0f);
     glVertex3f(x0, y0, zBack);
     glVertex3f(x1, y0, zBack);
     glVertex3f(x1, y0, zFront);
     glVertex3f(x0, y0, zFront);
 
     // Bottom
-    glColor4f(0.3f, 0.3f, 0.45f, 1.0f);
+    glColor4f(dr, dg, db, 1.0f);
     glVertex3f(x0, y1, zFront);
     glVertex3f(x1, y1, zFront);
     glVertex3f(x1, y1, zBack);

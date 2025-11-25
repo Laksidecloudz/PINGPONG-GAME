@@ -12,6 +12,7 @@ static inline bool aabbOverlap(float ax, float ay, float aw, float ah,
 Ball::Ball(float x_, float y_, float vx, float vy, int r)
     : x(x_), y(y_), velX(vx), velY(vy), trailBoost(0.0f), rallyEnergy(0.0f),
       leftImpactTimer(0.0f), rightImpactTimer(0.0f), topImpactTimer(0.0f), bottomImpactTimer(0.0f),
+      lastScoreX(x_), lastScoreY(y_),
       radius(r) {}
 
 void Ball::reset(float cx, float cy) {
@@ -81,10 +82,14 @@ void Ball::update(double dt, int screenW, int screenH,
 
     // Scoring: left/right bounds
     if (x + radius < 0.0f) {
+        lastScoreX = 0.0f;
+        lastScoreY = y;
         score2++;
         reset(screenW * 0.5f, screenH * 0.5f);
         return;
     } else if (x - radius > (float)screenW) {
+        lastScoreX = (float)screenW;
+        lastScoreY = y;
         score1++;
         reset(screenW * 0.5f, screenH * 0.5f);
         return;

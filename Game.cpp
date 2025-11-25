@@ -247,6 +247,23 @@ static void drawText(float x, float y, float scale, const char* text) {
     }
 }
 
+static const float kPaddleColorPresets[4][3] = {
+    {0.2f, 0.95f, 1.0f},
+    {0.3f, 1.0f, 0.4f},
+    {1.0f, 0.8f, 0.2f},
+    {1.0f, 0.3f, 0.9f}
+};
+
+static void applyPresetToPaddle(Paddle* paddle, int presetIndex) {
+    if (!paddle) return;
+    int idx = presetIndex;
+    if (idx < 0) idx = 0;
+    if (idx > 3) idx = 3;
+    paddle->colorR = kPaddleColorPresets[idx][0];
+    paddle->colorG = kPaddleColorPresets[idx][1];
+    paddle->colorB = kPaddleColorPresets[idx][2];
+}
+
 Game::Game(int w, int h) : width(w), height(h) {}
 
 bool Game::init() {
@@ -300,6 +317,9 @@ bool Game::init() {
     paddle1 = new Paddle(40.0f, (height - paddleH) * 0.5f, paddleW, paddleH, paddleSpeed, SDL_SCANCODE_W, SDL_SCANCODE_S);
     paddle2 = new Paddle(width - 40.0f - paddleW, (height - paddleH) * 0.5f, paddleW, paddleH, paddleSpeed, SDL_SCANCODE_UP, SDL_SCANCODE_DOWN);
 
+    applyPresetToPaddle(paddle1, p1ColorIndex);
+    applyPresetToPaddle(paddle2, p2ColorIndex);
+
     ball = new Ball(width * 0.5f, height * 0.5f, 420.0f, 140.0f, 10);
 
     perfFreq = SDL_GetPerformanceFrequency();
@@ -344,7 +364,12 @@ void Game::handleEvents() {
             } else {
                 // Global ESC: open/close pause menu, or quit from the main menu
                 if (sc == SDL_SCANCODE_ESCAPE) {
-                    if (inMainMenu) {
+                    if (inColorMenu) {
+                        inColorMenu = false;
+                        pendingMode = -1;
+                        colorMenuPlayer = 0;
+                        colorSelection = 0;
+                    } else if (inMainMenu) {
                         // From the opening main menu, ESC quits the game
                         isRunning = false;
                     } else {
@@ -360,101 +385,122 @@ void Game::handleEvents() {
                     if (ctrlDown && sc == SDL_SCANCODE_0) {
                         fxEnabled = !fxEnabled;
                     } else if (paused) {
-                        // Pause/main menu navigation
-                        const int menuItems = inMainMenu ? 5 : 7;
-                        if (sc == SDL_SCANCODE_UP) {
-                            pauseSelection = (pauseSelection - 1 + menuItems) % menuItems;
-                        } else if (sc == SDL_SCANCODE_DOWN) {
-                            pauseSelection = (pauseSelection + 1) % menuItems;
-                        } else if (sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_KP_ENTER) {
-                            // Apply menu selection
-                            if (inMainMenu) {
-                                // Opening main menu: no RESUME option
-                                if (pauseSelection == 0) {
-                                    // FIRST TO 15 (P1 vs AI)
-                                    singlePlayer = true;
-                                    endlessMode = false;
-                                    targetScore = 15;
+                        if (inColorMenu) {
+                            const int menuItems = 5;
+                            if (sc == SDL_SCANCODE_UP) {
+                                colorSelection = (colorSelection - 1 + menuItems) % menuItems;
+                            } else if (sc == SDL_SCANCODE_DOWN) {
+                                colorSelection = (colorSelection + 1) % menuItems;
+                            } else if (sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_KP_ENTER) {
+                                if (colorMenuPlayer == 0) {
+                                    if (colorSelection == 4) {
+                                        p1RandomColor = true;
+                                    } else {
+                                        p1RandomColor = false;
+                                        p1ColorIndex = colorSelection;
+                                    }
+                                    colorMenuPlayer = 1;
+                                    if (p2RandomColor) {
+                                        colorSelection = 4;
+                                    } else {
+                                        if (p2ColorIndex < 0) p2ColorIndex = 0;
+                                        if (p2ColorIndex > 3) p2ColorIndex = 3;
+                                        colorSelection = p2ColorIndex;
+                                    }
+                                } else {
+                                    if (colorSelection == 4) {
+                                        p2RandomColor = true;
+                                    } else {
+                                        p2RandomColor = false;
+                                        p2ColorIndex = colorSelection;
+                                    }
+
+                                    if (pendingMode == 0) {
+                                        singlePlayer = true;
+                                        endlessMode = false;
+                                        targetScore = 15;
+                                    } else if (pendingMode == 1) {
+                                        singlePlayer = true;
+                                        endlessMode = false;
+                                        targetScore = 30;
+                                    } else if (pendingMode == 2) {
+                                        singlePlayer = false;
+                                        endlessMode = false;
+                                        targetScore = 15;
+                                    } else if (pendingMode == 3) {
+                                        singlePlayer = true;
+                                        endlessMode = true;
+                                        targetScore = 0;
+                                    }
+
+                                    int idx1 = p1RandomColor ? (std::rand() % 4) : p1ColorIndex;
+                                    int idx2 = p2RandomColor ? (std::rand() % 4) : p2ColorIndex;
+                                    applyPresetToPaddle(paddle1, idx1);
+                                    applyPresetToPaddle(paddle2, idx2);
+
                                     gameOver = false;
                                     score1 = score2 = 0;
                                     paused = false;
                                     inMainMenu = false;
-                                } else if (pauseSelection == 1) {
-                                    // FIRST TO 30 (P1 vs AI)
-                                    singlePlayer = true;
-                                    endlessMode = false;
-                                    targetScore = 30;
-                                    gameOver = false;
-                                    score1 = score2 = 0;
-                                    paused = false;
-                                    inMainMenu = false;
-                                } else if (pauseSelection == 2) {
-                                    // P1 VS P2 (PvP, first to 15)
-                                    singlePlayer = false;
-                                    endlessMode = false;
-                                    targetScore = 15;
-                                    gameOver = false;
-                                    score1 = score2 = 0;
-                                    paused = false;
-                                    inMainMenu = false;
-                                } else if (pauseSelection == 3) {
-                                    // ENDLESS MODE (P1 vs AI, no target)
-                                    singlePlayer = true;
-                                    endlessMode = true;
-                                    targetScore = 0;
-                                    gameOver = false;
-                                    score1 = score2 = 0;
-                                    paused = false;
-                                    inMainMenu = false;
-                                } else if (pauseSelection == 4) {
-                                    // QUIT from main menu
-                                    isRunning = false;
-                                }
-                            } else {
-                                // In-game pause / game-over menu
-                                if (pauseSelection == 0) {
-                                    // RESUME (only meaningful in-game)
-                                    paused = false;
-                                } else if (pauseSelection == 1) {
-                                    // FIRST TO 15 (P1 vs AI)
-                                    singlePlayer = true;
-                                    endlessMode = false;
-                                    targetScore = 15;
-                                    gameOver = false;
-                                    score1 = score2 = 0;
-                                    paused = false;
-                                } else if (pauseSelection == 2) {
-                                    // FIRST TO 30 (P1 vs AI)
-                                    singlePlayer = true;
-                                    endlessMode = false;
-                                    targetScore = 30;
-                                    gameOver = false;
-                                    score1 = score2 = 0;
-                                    paused = false;
-                                } else if (pauseSelection == 3) {
-                                    // P1 VS P2 (PvP, first to 15)
-                                    singlePlayer = false;
-                                    endlessMode = false;
-                                    targetScore = 15;
-                                    gameOver = false;
-                                    score1 = score2 = 0;
-                                    paused = false;
-                                } else if (pauseSelection == 4) {
-                                    // ENDLESS MODE (P1 vs AI, no target)
-                                    singlePlayer = true;
-                                    endlessMode = true;
-                                    targetScore = 0;
-                                    gameOver = false;
-                                    score1 = score2 = 0;
-                                    paused = false;
-                                } else if (pauseSelection == 5) {
-                                    fxEnabled = !fxEnabled;
-                                } else if (pauseSelection == 6) {
-                                    // QUIT from pause menu
-                                    isRunning = false;
+                                    inColorMenu = false;
+                                    pendingMode = -1;
+                                    colorMenuPlayer = 0;
+                                    colorSelection = 0;
+                                    labelTimer = 0.0;
                                 }
                             }
-                            labelTimer = 0.0;
+                        } else {
+                            // Pause/main menu navigation
+                            const int menuItems = inMainMenu ? 5 : 7;
+                            if (sc == SDL_SCANCODE_UP) {
+                                pauseSelection = (pauseSelection - 1 + menuItems) % menuItems;
+                            } else if (sc == SDL_SCANCODE_DOWN) {
+                                pauseSelection = (pauseSelection + 1) % menuItems;
+                            } else if (sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_KP_ENTER) {
+                                if (inMainMenu) {
+                                    if (pauseSelection == 0) {
+                                        pendingMode = 0;
+                                    } else if (pauseSelection == 1) {
+                                        pendingMode = 1;
+                                    } else if (pauseSelection == 2) {
+                                        pendingMode = 2;
+                                    } else if (pauseSelection == 3) {
+                                        pendingMode = 3;
+                                    } else if (pauseSelection == 4) {
+                                        isRunning = false;
+                                    }
+                                } else {
+                                    if (pauseSelection == 0) {
+                                        paused = false;
+                                    } else if (pauseSelection == 1) {
+                                        pendingMode = 0;
+                                    } else if (pauseSelection == 2) {
+                                        pendingMode = 1;
+                                    } else if (pauseSelection == 3) {
+                                        pendingMode = 2;
+                                    } else if (pauseSelection == 4) {
+                                        pendingMode = 3;
+                                    } else if (pauseSelection == 5) {
+                                        fxEnabled = !fxEnabled;
+                                    } else if (pauseSelection == 6) {
+                                        isRunning = false;
+                                    }
+                                }
+
+                                if (pendingMode >= 0 && paused) {
+                                    inColorMenu = true;
+                                    colorMenuPlayer = 0;
+                                    if (p1RandomColor) {
+                                        colorSelection = 4;
+                                    } else {
+                                        if (p1ColorIndex < 0) p1ColorIndex = 0;
+                                        if (p1ColorIndex > 3) p1ColorIndex = 3;
+                                        colorSelection = p1ColorIndex;
+                                    }
+                                }
+
+                                labelTimer = 0.0;
+                            }
                         }
                     } else {
                         if (sc == SDL_SCANCODE_P) {
@@ -472,6 +518,11 @@ void Game::handleEvents() {
 }
 
 void Game::update(double dt) {
+    if (ballExplosionTimer > 0.0) {
+        ballExplosionTimer -= dt;
+        if (ballExplosionTimer < 0.0) ballExplosionTimer = 0.0;
+    }
+
     if (inStartScreen || paused || gameOver) {
         return;
     }
@@ -507,6 +558,11 @@ void Game::update(double dt) {
     // Detect score changes to trigger a brief flash
     if (score1 != lastScore1 || score2 != lastScore2) {
         scoreFlashTimer = 0.3; // seconds
+        ballExplosionTimer = 0.2;
+        if (ball) {
+            ballExplosionX = ball->lastScoreX;
+            ballExplosionY = ball->lastScoreY;
+        }
         lastScore1 = score1;
         lastScore2 = score2;
     }
@@ -629,8 +685,8 @@ void Game::render() {
         if (scorePulse > 1.0f) scorePulse = 1.0f;
     }
 
-    float accentBoost = 1.0f + 0.25f * rally + 0.25f * scorePulse;
-    if (accentBoost > 1.5f) accentBoost = 1.5f;
+    float accentBoost = 1.0f + 0.4f * rally + 0.6f * scorePulse;
+    if (accentBoost > 1.8f) accentBoost = 1.8f;
     accentR *= accentBoost;
     accentG *= accentBoost;
     accentB *= accentBoost;
@@ -716,16 +772,22 @@ void Game::render() {
 
     if (fxEnabled) {
         float centerX = (float)width * 0.5f;
-        float centerGlowWidth = 140.0f;
+        float baseGlowWidth = 140.0f;
+        float widthScale = 1.0f + 0.25f * rally + 0.5f * scorePulse;
+        if (widthScale > 1.9f) widthScale = 1.9f;
+        float centerGlowWidth = baseGlowWidth * widthScale;
         float centerGlowHalf = centerGlowWidth * 0.5f;
         float glowTop = 0.0f;
         float glowBottom = (float)height;
+
+        float glowAlpha = 0.45f + 0.25f * rally + 0.4f * scorePulse;
+        if (glowAlpha > 0.9f) glowAlpha = 0.9f;
 
         glBegin(GL_QUADS);
         glColor4f(accentR * 0.0f, accentG * 0.0f, accentB * 0.0f, 0.0f);
         glVertex2f(centerX - centerGlowHalf, glowTop);
         glVertex2f(centerX + centerGlowHalf, glowTop);
-        glColor4f(accentR * 0.6f, accentG * 0.6f, accentB * 0.7f, 0.55f);
+        glColor4f(accentR * 0.7f, accentG * 0.7f, accentB * 0.8f, glowAlpha);
         glVertex2f(centerX + centerGlowHalf, glowBottom);
         glVertex2f(centerX - centerGlowHalf, glowBottom);
         glEnd();
@@ -780,6 +842,143 @@ void Game::render() {
                 glVertex2f(cx, cy);
                 glEnd();
             }
+        }
+
+        if (ballExplosionTimer > 0.0) {
+            float t = 1.0f - (float)(ballExplosionTimer / 0.2f);
+            if (t < 0.0f) t = 0.0f;
+            if (t > 1.0f) t = 1.0f;
+
+            float cx = ballExplosionX;
+            float cy = ballExplosionY;
+            float radius = 20.0f + 130.0f * t;
+            float alpha = 0.95f * (1.0f - t);
+            float ringR = accentR * 1.2f;
+            float ringG = accentG * 1.2f;
+            float ringB = accentB * 1.2f;
+
+            glBegin(GL_TRIANGLE_FAN);
+            glColor4f(ringR, ringG, ringB, 0.0f);
+            glVertex2f(cx, cy);
+            int segments = 32;
+            for (int i = 0; i <= segments; ++i) {
+                float ang = (float)i / (float)segments * 6.2831853f;
+                float px2 = cx + std::cos(ang) * radius;
+                float py2 = cy + std::sin(ang) * radius;
+                glColor4f(ringR, ringG, ringB, alpha);
+                glVertex2f(px2, py2);
+            }
+            glEnd();
+
+            glLineWidth(3.0f);
+            glBegin(GL_LINES);
+            int shardCount = 8;
+            float shardBase = radius * 0.5f;
+            float shardLen = radius * 0.7f;
+            float shardAlpha = alpha * 1.2f;
+            if (shardAlpha > 1.0f) shardAlpha = 1.0f;
+            for (int i = 0; i < shardCount; ++i) {
+                float ang = (float)i / (float)shardCount * 6.2831853f + 0.4f;
+                float dirX = std::cos(ang);
+                float dirY = std::sin(ang);
+                float sx = cx + dirX * shardBase;
+                float sy = cy + dirY * shardBase;
+                float ex = cx + dirX * (shardBase + shardLen);
+                float ey = cy + dirY * (shardBase + shardLen);
+                glColor4f(ringR, ringG, ringB, shardAlpha);
+                glVertex2f(sx, sy);
+                glColor4f(ringR, ringG, ringB, 0.0f);
+                glVertex2f(ex, ey);
+            }
+            glEnd();
+        }
+    }
+
+    if (fxEnabled && ball) {
+        float maxImpact = 0.12f;
+
+        if (ball->leftImpactTimer > 0.0f) {
+            float t = ball->leftImpactTimer / maxImpact;
+            if (t > 1.0f) t = 1.0f;
+            float alpha = 0.8f * t;
+            float flashW = 20.0f;
+            float flashH = 60.0f;
+            float px = paddle1->x + paddle1->width;
+            float py = ball->y;
+            float x0 = px;
+            float x1 = px + flashW;
+            float y0 = py - flashH * 0.5f;
+            float y1 = py + flashH * 0.5f;
+            if (y0 < 0.0f) y0 = 0.0f;
+            if (y1 > (float)height) y1 = (float)height;
+
+            glBegin(GL_QUADS);
+            glColor4f(accentR, accentG, accentB, alpha);
+            glVertex2f(x0, y0);
+            glVertex2f(x1, y0);
+            glColor4f(accentR, accentG, accentB, 0.0f);
+            glVertex2f(x1, y1);
+            glVertex2f(x0, y1);
+            glEnd();
+        }
+
+        if (ball->rightImpactTimer > 0.0f) {
+            float t = ball->rightImpactTimer / maxImpact;
+            if (t > 1.0f) t = 1.0f;
+            float alpha = 0.8f * t;
+            float flashW = 20.0f;
+            float flashH = 60.0f;
+            float px = paddle2->x;
+            float py = ball->y;
+            float x0 = px - flashW;
+            float x1 = px;
+            float y0 = py - flashH * 0.5f;
+            float y1 = py + flashH * 0.5f;
+            if (y0 < 0.0f) y0 = 0.0f;
+            if (y1 > (float)height) y1 = (float)height;
+
+            glBegin(GL_QUADS);
+            glColor4f(accentR, accentG, accentB, alpha);
+            glVertex2f(x0, y0);
+            glVertex2f(x1, y0);
+            glColor4f(accentR, accentG, accentB, 0.0f);
+            glVertex2f(x1, y1);
+            glVertex2f(x0, y1);
+            glEnd();
+        }
+
+        if (ball->topImpactTimer > 0.0f) {
+            float t = ball->topImpactTimer / maxImpact;
+            if (t > 1.0f) t = 1.0f;
+            float alpha = 0.7f * t;
+            float h = 18.0f;
+
+            glBegin(GL_QUADS);
+            glColor4f(accentR, accentG, accentB, alpha);
+            glVertex2f(0.0f, 0.0f);
+            glVertex2f((float)width, 0.0f);
+            glColor4f(accentR, accentG, accentB, 0.0f);
+            glVertex2f((float)width, h);
+            glVertex2f(0.0f, h);
+            glEnd();
+        }
+
+        if (ball->bottomImpactTimer > 0.0f) {
+            float t = ball->bottomImpactTimer / maxImpact;
+            if (t > 1.0f) t = 1.0f;
+            float alpha = 0.7f * t;
+            float h = 18.0f;
+            float y0 = (float)height - h;
+            float y1 = (float)height;
+
+            glBegin(GL_QUADS);
+            glColor4f(accentR, accentG, accentB, 0.0f);
+            glVertex2f(0.0f, y0);
+            glVertex2f((float)width, y0);
+            glColor4f(accentR, accentG, accentB, alpha);
+            glVertex2f((float)width, y1);
+            glVertex2f(0.0f, y1);
+            glEnd();
         }
     }
 
@@ -884,7 +1083,39 @@ void Game::render() {
     }
 
     if (paused) {
-        if (inMainMenu) {
+        if (inColorMenu) {
+            const char* headerText = (colorMenuPlayer == 0) ? "P1 COLOR" : "P2 COLOR";
+            float headerScale = 24.0f;
+            float textWidth = measureText(headerScale, headerText);
+            float x = (float)width * 0.5f - textWidth * 0.5f;
+            float y = (float)height * 0.5f - headerScale * 0.5f - 60.0f;
+            drawText(x, y, headerScale, headerText);
+
+            const char* items[5] = {
+                "CYAN",
+                "GREEN",
+                "GOLD",
+                "MAGENTA",
+                "RANDOM"
+            };
+
+            float menuScale = 18.0f;
+            float startY = y + headerScale * 1.8f;
+
+            for (int i = 0; i < 5; ++i) {
+                float w = measureText(menuScale, items[i]);
+                float ix = (float)width * 0.5f - w * 0.5f;
+                float iy = startY + i * (menuScale * 1.4f);
+
+                if (i == colorSelection) {
+                    glColor4f(1.0f, 1.0f, 0.3f, 1.0f);
+                } else {
+                    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+                }
+
+                drawText(ix, iy, menuScale, items[i]);
+            }
+        } else if (inMainMenu) {
             // Opening main menu: opaque background, no RESUME option
             const char* headerText = "MAIN MENU";
             float headerScale = 24.0f;

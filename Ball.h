@@ -22,5 +22,7 @@ public:
     float rightImpactTimer;
     float topImpactTimer;
     float bottomImpactTimer;
+    float lastScoreX;
+    float lastScoreY;
     int radius;
 };
