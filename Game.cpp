@@ -22,6 +22,11 @@ static void drawChar(float x, float y, float scale, char c) {
         segment(1.0f, 1.0f, 0.5f, 0.0f);
         segment(0.2f, 0.5f, 0.8f, 0.5f);
         break;
+    case 'C':
+        segment(0.8f, 0.0f, 0.2f, 0.0f);
+        segment(0.2f, 0.0f, 0.2f, 1.0f);
+        segment(0.2f, 1.0f, 0.8f, 1.0f);
+        break;
     case 'D':
         segment(0.0f, 0.0f, 0.0f, 1.0f);
         segment(0.0f, 0.0f, 0.6f, 0.2f);
@@ -264,6 +269,39 @@ static void applyPresetToPaddle(Paddle* paddle, int presetIndex) {
     paddle->colorB = kPaddleColorPresets[idx][2];
 }
 
+static void applyRandomVividColor(Paddle* paddle) {
+    if (!paddle) return;
+
+    float h = (float)(std::rand() % 360) / 360.0f;
+    float s = 0.9f;
+    float v = 1.0f;
+
+    float c = v * s;
+    float hh = h * 6.0f;
+    int sector = (int)hh;
+    float f = hh - (float)sector;
+    float p = v * (1.0f - s);
+    float q = v * (1.0f - s * f);
+    float t = v * (1.0f - s * (1.0f - f));
+
+    float r = v;
+    float g = v;
+    float b = v;
+
+    switch (sector % 6) {
+    case 0: r = v; g = t; b = p; break;
+    case 1: r = q; g = v; b = p; break;
+    case 2: r = p; g = v; b = t; break;
+    case 3: r = p; g = q; b = v; break;
+    case 4: r = t; g = p; b = v; break;
+    case 5: r = v; g = p; b = q; break;
+    }
+
+    paddle->colorR = r;
+    paddle->colorG = g;
+    paddle->colorB = b;
+}
+
 Game::Game(int w, int h) : width(w), height(h) {}
 
 bool Game::init() {
@@ -362,6 +400,15 @@ void Game::handleEvents() {
                     isRunning = false;
                 }
             } else {
+                if (inWinLoseScreen) {
+                    if (sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_KP_ENTER || sc == SDL_SCANCODE_ESCAPE) {
+                        inWinLoseScreen = false;
+                        winLoseShowPrompt = false;
+                        winLoseTimer = 0.0;
+                    }
+                    return;
+                }
+
                 // Global ESC: open/close pause menu, or quit from the main menu
                 if (sc == SDL_SCANCODE_ESCAPE) {
                     if (inColorMenu) {
@@ -433,10 +480,17 @@ void Game::handleEvents() {
                                         targetScore = 0;
                                     }
 
-                                    int idx1 = p1RandomColor ? (std::rand() % 4) : p1ColorIndex;
-                                    int idx2 = p2RandomColor ? (std::rand() % 4) : p2ColorIndex;
-                                    applyPresetToPaddle(paddle1, idx1);
-                                    applyPresetToPaddle(paddle2, idx2);
+                                    if (p1RandomColor) {
+                                        applyRandomVividColor(paddle1);
+                                    } else {
+                                        applyPresetToPaddle(paddle1, p1ColorIndex);
+                                    }
+
+                                    if (p2RandomColor) {
+                                        applyRandomVividColor(paddle2);
+                                    } else {
+                                        applyPresetToPaddle(paddle2, p2ColorIndex);
+                                    }
 
                                     gameOver = false;
                                     score1 = score2 = 0;
@@ -523,6 +577,14 @@ void Game::update(double dt) {
         if (ballExplosionTimer < 0.0) ballExplosionTimer = 0.0;
     }
 
+    if (inWinLoseScreen) {
+        winLoseTimer += dt;
+        double delay = lastAiWin ? 3.0 : 1.5;
+        if (!winLoseShowPrompt && winLoseTimer >= delay) {
+            winLoseShowPrompt = true;
+        }
+    }
+
     if (inStartScreen || paused || gameOver) {
         return;
     }
@@ -571,6 +633,13 @@ void Game::update(double dt) {
         if (score1 >= targetScore || score2 >= targetScore) {
             gameOver = true;
             paused = true;
+
+            inWinLoseScreen = true;
+            winLoseTimer = 0.0;
+            winLoseShowPrompt = false;
+
+            lastWinner = (score1 > score2) ? 1 : 2;
+            lastAiWin = (singlePlayer && lastWinner == 2);
             // Leave scores as-is so they can be displayed
         }
     }
@@ -1149,63 +1218,197 @@ void Game::render() {
                 drawText(ix, iy, menuScale, items[i]);
             }
         } else {
-            // In-game pause / game-over menu: translucent background, includes RESUME
-            const char* pausedText = gameOver ? "GAME OVER" : "PAUSED";
-            float pausedScale = 24.0f;
-            float textWidth = measureText(pausedScale, pausedText);
-            float x = (float)width * 0.5f - textWidth * 0.5f;
-            float y = (float)height * 0.5f - pausedScale * 0.5f - 60.0f;
-            drawText(x, y, pausedScale, pausedText);
+            if (inWinLoseScreen && gameOver) {
+                float centerX = (float)width * 0.5f;
+                float centerY = (float)height * 0.5f;
 
-            if (gameOver) {
-                // Show winner text when a target score has been reached
-                const char* winnerText = nullptr;
-                if (score1 > score2) {
-                    winnerText = "PLAYER 1 WINS";
-                } else if (score2 > score1) {
-                    winnerText = "PLAYER 2 WINS";
-                }
-                if (winnerText) {
-                    float ws = 18.0f;
-                    float ww = measureText(ws, winnerText);
-                    float wx = (float)width * 0.5f - ww * 0.5f;
-                    float wy = y + pausedScale * 1.6f;
-                    drawText(wx, wy, ws, winnerText);
-                }
-            }
-
-            const char* items[7] = {
-                "RESUME",
-                "FIRST TO 15",
-                "FIRST TO 30",
-                "P1 VS P2",
-                "ENDLESS MODE",
-                nullptr,
-                "QUIT"
-            };
-
-            float menuScale = 18.0f;
-            float startY = y + pausedScale * (gameOver ? 2.4f : 1.8f);
-
-            for (int i = 0; i < 7; ++i) {
-                const char* label = items[i];
-                char fxLabel[32];
-                if (i == 5) {
-                    std::snprintf(fxLabel, sizeof(fxLabel), fxEnabled ? "VISUAL FX: ON" : "VISUAL FX: OFF");
-                    label = fxLabel;
+                // Background tint for win/lose
+                if (fxEnabled) {
+                    glBegin(GL_QUADS);
+                    if (lastAiWin) {
+                        glColor4f(0.05f, 0.0f, 0.10f, 0.85f);
+                        glVertex2f(0.0f, 0.0f);
+                        glVertex2f((float)width, 0.0f);
+                        glColor4f(0.2f, 0.0f, 0.0f, 0.95f);
+                        glVertex2f((float)width, (float)height);
+                        glVertex2f(0.0f, (float)height);
+                    } else {
+                        glColor4f(accentR * 0.25f, accentG * 0.25f, accentB * 0.35f, 0.6f);
+                        glVertex2f(0.0f, 0.0f);
+                        glVertex2f((float)width, 0.0f);
+                        glColor4f(accentR * 0.05f, accentG * 0.05f, accentB * 0.1f, 0.9f);
+                        glVertex2f((float)width, (float)height);
+                        glVertex2f(0.0f, (float)height);
+                    }
+                    glEnd();
                 }
 
-                float w = measureText(menuScale, label);
-                float ix = (float)width * 0.5f - w * 0.5f;
-                float iy = startY + i * (menuScale * 1.4f);
+                // Radial glow behind title
+                if (fxEnabled) {
+                    float t = (float)winLoseTimer;
+                    float pulse = 0.7f + 0.3f * std::sin(t * 3.5f);
+                    float radius = (float)width * 0.25f + pulse * 30.0f;
+                    float alpha = 0.9f;
 
-                if (i == pauseSelection) {
-                    glColor4f(1.0f, 1.0f, 0.3f, 1.0f);
+                    float glowR = accentR * (lastAiWin ? 0.7f : 1.4f);
+                    float glowG = accentG * (lastAiWin ? 0.3f : 1.4f);
+                    float glowB = accentB * (lastAiWin ? 0.5f : 1.4f);
+
+                    glBegin(GL_TRIANGLE_FAN);
+                    glColor4f(glowR, glowG, glowB, alpha);
+                    glVertex2f(centerX, centerY);
+                    int segments = 40;
+                    for (int i = 0; i <= segments; ++i) {
+                        float ang = (float)i / (float)segments * 6.2831853f;
+                        float px2 = centerX + std::cos(ang) * radius;
+                        float py2 = centerY + std::sin(ang) * radius;
+                        glColor4f(glowR, glowG, glowB, 0.0f);
+                        glVertex2f(px2, py2);
+                    }
+                    glEnd();
+                }
+
+                // Determine title text
+                const char* title = "GAME OVER";
+                if (singlePlayer) {
+                    if (lastAiWin) {
+                        title = "YOU LOSE";
+                    } else if (lastWinner == 1) {
+                        title = "YOU WIN";
+                    }
                 } else {
-                    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+                    if (lastWinner == 1) {
+                        title = "PLAYER 1 WINS";
+                    } else if (lastWinner == 2) {
+                        title = "PLAYER 2 WINS";
+                    }
                 }
 
-                drawText(ix, iy, menuScale, label);
+                float baseScale = lastAiWin ? 26.0f : 30.0f;
+                float pulse = 1.0f + 0.08f * std::sin((float)winLoseTimer * 4.0f);
+                float titleScale = baseScale * pulse;
+
+                float titleWidth = measureText(titleScale, title);
+                float tx = centerX - titleWidth * 0.5f;
+                float ty = centerY - titleScale * 1.2f;
+
+                // Drop shadow for pseudo-3D depth
+                float shadowOffset = 3.0f;
+                glColor4f(0.0f, 0.0f, 0.0f, 0.8f);
+                drawText(tx + shadowOffset, ty + shadowOffset, titleScale, title);
+
+                // Main title color
+                if (lastAiWin) {
+                    glColor4f(accentR * 1.4f, accentG * 0.3f, accentB * 0.4f, 1.0f);
+                } else {
+                    glColor4f(accentR * 1.4f, accentG * 1.4f, accentB * 1.4f, 1.0f);
+                }
+                drawText(tx, ty, titleScale, title);
+
+                // Final score under title
+                char scoreText[32];
+                std::snprintf(scoreText, sizeof(scoreText), "%d : %d", score1, score2);
+                float scoreScale = 18.0f;
+                float scoreWidth = measureText(scoreScale, scoreText);
+                float sx = centerX - scoreWidth * 0.5f;
+                float sy = ty + titleScale * 1.1f;
+                glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+                drawText(sx, sy, scoreScale, scoreText);
+
+                // AI loss countdown
+                if (lastAiWin) {
+                    float total = 3.0f;
+                    if (winLoseTimer < total) {
+                        int count = 3 - (int)winLoseTimer;
+                        if (count < 1) count = 1;
+                        char num[4];
+                        std::snprintf(num, sizeof(num), "%d", count);
+
+                        float numScale = 34.0f;
+                        float numWidth = measureText(numScale, num);
+                        float nx = centerX - numWidth * 0.5f;
+                        float ny = sy + numScale * 1.4f;
+
+                        float jitter = 1.5f * std::sin((float)winLoseTimer * 10.0f);
+                        glColor4f(1.0f, 0.4f, 0.4f, 1.0f);
+                        drawText(nx + jitter, ny, numScale, num);
+                    }
+                }
+
+                // Prompt
+                if (winLoseShowPrompt) {
+                    const char* prompt = "PRESS ENTER TO CONTINUE";
+                    float promptScale = 16.0f;
+                    float promptWidth = measureText(promptScale, prompt);
+                    float px = centerX - promptWidth * 0.5f;
+                    float py = sy + 40.0f;
+
+                    float blink = 0.5f + 0.5f * std::sin((float)winLoseTimer * 4.0f);
+                    float pr = lastAiWin ? 0.8f : 1.0f;
+                    float pg = lastAiWin ? 0.8f : 1.0f;
+                    float pb = 1.0f;
+                    glColor4f(pr, pg, pb, blink);
+                    drawText(px, py, promptScale, prompt);
+                }
+            } else {
+                // In-game pause / game-over menu: translucent background, includes RESUME
+                const char* pausedText = gameOver ? "GAME OVER" : "PAUSED";
+                float pausedScale = 24.0f;
+                float textWidth = measureText(pausedScale, pausedText);
+                float x = (float)width * 0.5f - textWidth * 0.5f;
+                float y = (float)height * 0.5f - pausedScale * 0.5f - 60.0f;
+                drawText(x, y, pausedScale, pausedText);
+
+                if (gameOver) {
+                    // Show winner text when a target score has been reached
+                    const char* winnerText = nullptr;
+                    if (score1 > score2) {
+                        winnerText = "PLAYER 1 WINS";
+                    } else if (score2 > score1) {
+                        winnerText = "PLAYER 2 WINS";
+                    }
+                    if (winnerText) {
+                        float ws = 18.0f;
+                        float ww = measureText(ws, winnerText);
+                        float wx = (float)width * 0.5f - ww * 0.5f;
+                        float wy = y + pausedScale * 1.6f;
+                        drawText(wx, wy, ws, winnerText);
+                    }
+                }
+
+                const char* items[7] = {
+                    "RESUME",
+                    "FIRST TO 15",
+                    "FIRST TO 30",
+                    "P1 VS P2",
+                    "ENDLESS MODE",
+                    nullptr,
+                    "QUIT"
+                };
+
+                float menuScale = 18.0f;
+                float startY = y + pausedScale * (gameOver ? 2.4f : 1.8f);
+
+                for (int i = 0; i < 7; ++i) {
+                    const char* label = items[i];
+                    char fxLabel[32];
+                    if (i == 5) {
+                        std::snprintf(fxLabel, sizeof(fxLabel), fxEnabled ? "VISUAL FX: ON" : "VISUAL FX: OFF");
+                        label = fxLabel;
+                    }
+
+                    float w = measureText(menuScale, label);
+                    float ix = (float)width * 0.5f - w * 0.5f;
+                    float iy = startY + i * (menuScale * 1.4f);
+
+                    if (i == pauseSelection) {
+                        glColor4f(1.0f, 1.0f, 0.3f, 1.0f);
+                    } else {
+                        glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+                    }
+
+                    drawText(ix, iy, menuScale, label);
+                }
             }
         }
     }

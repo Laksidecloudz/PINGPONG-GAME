@@ -41,6 +41,12 @@ private:
     bool p1RandomColor = false;
     bool p2RandomColor = false;
 
+    bool inWinLoseScreen = false;
+    double winLoseTimer = 0.0;
+    bool winLoseShowPrompt = false;
+    int lastWinner = 0; // 0 = none, 1 = P1, 2 = P2
+    bool lastAiWin = false;
+
     SDL_Window* window = nullptr;
     SDL_GLContext glContext = nullptr;
 
