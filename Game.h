@@ -18,6 +18,67 @@ private:
     void resetProjection();
 
 private:
+    struct LoseShard {
+        float x;
+        float y;
+        float vx;
+        float vy;
+        float ax;
+        float ay;
+        float size;
+        float angle;
+        float angularVelocity;
+        float life;
+        float maxLife;
+        float r;
+        float g;
+        float b;
+        bool active;
+    };
+
+    struct LoseWisp {
+        float x;
+        float y;
+        float vx;
+        float vy;
+        float life;
+        float maxLife;
+        float r;
+        float g;
+        float b;
+        bool active;
+    };
+
+    struct OrbitBall {
+        float angle;
+        float radius;
+        float speed;
+        float size;
+        float r;
+        float g;
+        float b;
+    };
+
+    static const int MaxLoseShards = 96;
+    static const int MaxLoseWisps = 64;
+    static const int MaxOrbitBalls = 10;
+
+    LoseShard loseShards[MaxLoseShards];
+    LoseWisp loseWisps[MaxLoseWisps];
+    OrbitBall orbitBalls[MaxOrbitBalls];
+
+    int loseShardCount = 0;
+    int loseWispCount = 0;
+    int orbitBallCount = 0;
+    bool loseShatterActive = false;
+    bool winDanceActive = false;
+    double loseShatterTimer = 0.0;
+    double winDanceTimer = 0.0;
+    float winPaddleStartX = 0.0f;
+    float winPaddleStartY = 0.0f;
+    float winPaddleLandingX = 0.0f;
+    float winPaddleLandingY = 0.0f;
+
     int width, height;
     bool isRunning = false;
     bool inStartScreen = true;
