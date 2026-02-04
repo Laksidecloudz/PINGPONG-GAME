@@ -87,6 +87,10 @@ private:
     bool singlePlayer = false;
     bool endlessMode = false;
     bool fxEnabled = true;
+
+    enum AIDifficulty { AI_EASY = 0, AI_MEDIUM = 1, AI_HARD = 2 };
+    AIDifficulty aiDifficulty = AI_MEDIUM;
+    int playerSide = 1; // 1 = left paddle (P1), 2 = right paddle (P2)
     bool inColorMenu = false;
     int targetScore = 15;
     bool gameOver = false;
@@ -119,6 +123,20 @@ private:
     int score2 = 0;
     int lastScore1 = 0;
     int lastScore2 = 0;
+
+    int health1 = 5;
+    int health2 = 5;
+    static const int MaxHealth = 5;
+    bool koWin = false;
+
+    float boostMeter1 = 0.0f;
+    float boostMeter2 = 0.0f;
+    bool boostActive1 = false;
+    bool boostActive2 = false;
+    bool autoBoostEnabled = false;
+    static constexpr float BoostMultiplier = 1.6f;
+    static constexpr float BoostDrainRate = 0.8f;
+    static constexpr float BoostFillAmount = 0.25f;
 
     float ballExplosionX = 0.0f;
     float ballExplosionY = 0.0f;

@@ -525,7 +525,11 @@ void Game::handleEvents() {
                                     }
 
                                     gameOver = false;
+                                    koWin = false;
                                     score1 = score2 = 0;
+                                    health1 = health2 = MaxHealth;
+                                    boostMeter1 = boostMeter2 = 0.0f;
+                                    boostActive1 = boostActive2 = false;
                                     paused = false;
                                     inMainMenu = false;
                                     inColorMenu = false;
@@ -537,7 +541,7 @@ void Game::handleEvents() {
                             }
                         } else {
                             // Pause/main menu navigation
-                            const int menuItems = inMainMenu ? 5 : 7;
+                            const int menuItems = inMainMenu ? 5 : 10;
                             if (sc == SDL_SCANCODE_UP) {
                                 pauseSelection = (pauseSelection - 1 + menuItems) % menuItems;
                             } else if (sc == SDL_SCANCODE_DOWN) {
@@ -569,6 +573,15 @@ void Game::handleEvents() {
                                     } else if (pauseSelection == 5) {
                                         fxEnabled = !fxEnabled;
                                     } else if (pauseSelection == 6) {
+                                        // Cycle AI difficulty
+                                        aiDifficulty = (AIDifficulty)((aiDifficulty + 1) % 3);
+                                    } else if (pauseSelection == 7) {
+                                        // Toggle auto-boost
+                                        autoBoostEnabled = !autoBoostEnabled;
+                                    } else if (pauseSelection == 8) {
+                                        // Toggle player side (left/right)
+                                        playerSide = (playerSide == 1) ? 2 : 1;
+                                    } else if (pauseSelection == 9) {
                                         isRunning = false;
                                     }
                                 }
@@ -663,27 +676,119 @@ void Game::update(double dt) {
     }
 
     const bool* keys = SDL_GetKeyboardState(nullptr);
-    paddle1->handleInput(keys);
-
+    
+    // Boost activation: P1 = Shift, P2 = RCtrl
+    bool p1WantsBoost = keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT];
+    bool p2WantsBoost = keys[SDL_SCANCODE_RCTRL];
+    
+    // Handle boost for P1
+    if (autoBoostEnabled) {
+        // Auto-boost: activate automatically when meter > 0
+        boostActive1 = (boostMeter1 > 0.0f);
+    } else {
+        // Manual boost: hold key while having meter
+        boostActive1 = (p1WantsBoost && boostMeter1 > 0.0f);
+    }
+    
+    // Drain boost meter while active
+    if (boostActive1) {
+        boostMeter1 -= BoostDrainRate * (float)dt;
+        if (boostMeter1 <= 0.0f) {
+            boostMeter1 = 0.0f;
+            boostActive1 = false;
+        }
+    }
+    
+    // Handle boost for P2 (only in 2-player mode)
+    if (!singlePlayer) {
+        if (autoBoostEnabled) {
+            boostActive2 = (boostMeter2 > 0.0f);
+        } else {
+            boostActive2 = (p2WantsBoost && boostMeter2 > 0.0f);
+        }
+        
+        if (boostActive2) {
+            boostMeter2 -= BoostDrainRate * (float)dt;
+            if (boostMeter2 <= 0.0f) {
+                boostMeter2 = 0.0f;
+                boostActive2 = false;
+            }
+        }
+    }
+    
+    // Apply boost multiplier to paddle speeds temporarily
+    float originalSpeed1 = paddle1->speed;
+    float originalSpeed2 = paddle2->speed;
+    if (boostActive1) paddle1->speed *= BoostMultiplier;
+    if (boostActive2) paddle2->speed *= BoostMultiplier;
+    
     if (singlePlayer && ball) {
-        float paddleCenterY = paddle2->y + paddle2->height * 0.5f;
+        // Determine which paddle is player-controlled and which is AI
+        Paddle* playerPaddle = (playerSide == 1) ? paddle1 : paddle2;
+        Paddle* aiPaddle = (playerSide == 1) ? paddle2 : paddle1;
+        
+        // Player input
+        playerPaddle->handleInput(keys);
+        
+        // AI control
+        float paddleCenterY = aiPaddle->y + aiPaddle->height * 0.5f;
+        
+        // Predictive AI: calculate where ball will be when it reaches AI paddle
         float targetY = ball->y;
+        bool ballMovingTowardAI = (playerSide == 1) ? (ball->velX > 0) : (ball->velX < 0);
+        if (ballMovingTowardAI) {
+            float timeToReach = std::fabs((aiPaddle->x - ball->x) / ball->velX);
+            if (timeToReach > 0 && timeToReach < 2.0f) {
+                float predictedY = ball->y + ball->velY * timeToReach;
+                // Handle wall bounces in prediction
+                float screenH = (float)height;
+                while (predictedY < 0 || predictedY > screenH) {
+                    if (predictedY < 0) predictedY = -predictedY;
+                    else if (predictedY > screenH) predictedY = 2 * screenH - predictedY;
+                }
+                targetY = predictedY;
+            }
+        }
+        
         float diff = targetY - paddleCenterY;
 
-        float maxSpeed = paddle2->speed * 0.8f;
-        float desiredVy = diff * 3.0f;
+        // Difficulty-based AI parameters
+        float speedMult, reactionMult;
+        switch (aiDifficulty) {
+            case AI_EASY:
+                speedMult = 0.55f;
+                reactionMult = 2.0f;
+                break;
+            case AI_MEDIUM:
+                speedMult = 0.75f;
+                reactionMult = 3.5f;
+                break;
+            case AI_HARD:
+            default:
+                speedMult = 0.95f;
+                reactionMult = 5.0f;
+                break;
+        }
+
+        float maxSpeed = aiPaddle->speed * speedMult;
+        float desiredVy = diff * reactionMult;
         if (desiredVy > maxSpeed) desiredVy = maxSpeed;
         if (desiredVy < -maxSpeed) desiredVy = -maxSpeed;
 
-        paddle2->setVerticalSpeed(desiredVy);
+        aiPaddle->setVerticalSpeed(desiredVy);
     } else {
+        paddle1->handleInput(keys);
         paddle2->handleInput(keys);
     }
 
     paddle1->move(dt, height);
     paddle2->move(dt, height);
+    
+    // Restore original speeds
+    paddle1->speed = originalSpeed1;
+    paddle2->speed = originalSpeed2;
 
-    ball->update(dt, width, height, *paddle1, *paddle2, score1, score2);
+    ball->update(dt, width, height, *paddle1, *paddle2, score1, score2, health1, health2, boostMeter1, boostMeter2);
     // Detect score changes to trigger a brief flash
     if (score1 != lastScore1 || score2 != lastScore2) {
         scoreFlashTimer = 0.3; // seconds
@@ -695,9 +800,123 @@ void Game::update(double dt) {
         lastScore1 = score1;
         lastScore2 = score2;
     }
+    // Check KO win condition (health depleted)
+    if (health1 <= 0 || health2 <= 0) {
+        gameOver = true;
+        paused = true;
+        koWin = true;
+
+        inWinLoseScreen = true;
+        winLoseTimer = 0.0;
+        winLoseShowPrompt = false;
+
+        lastWinner = (health2 <= 0) ? 1 : 2;
+        lastAiWin = (singlePlayer && lastWinner == 2);
+        loseShatterActive = false;
+        winDanceActive = false;
+        loseShardCount = 0;
+        loseWispCount = 0;
+        orbitBallCount = 0;
+        loseShatterTimer = 0.0;
+        winDanceTimer = 0.0;
+
+        if (lastAiWin) {
+            loseShatterActive = true;
+
+            Paddle* losingPaddle = paddle1;
+            if (losingPaddle) {
+                float px0 = losingPaddle->x;
+                float py0 = losingPaddle->y;
+                float px1 = px0 + losingPaddle->width;
+                float py1 = py0 + losingPaddle->height;
+
+                loseShardCount = MaxLoseShards;
+
+                for (int i = 0; i < loseShardCount; ++i) {
+                    LoseShard& s = loseShards[i];
+                    float rx = (float)std::rand() / (float)RAND_MAX;
+                    float ry = (float)std::rand() / (float)RAND_MAX;
+                    s.x = px0 + (px1 - px0) * rx;
+                    s.y = py0 + (py1 - py0) * ry;
+
+                    float dirX = (float)std::rand() / (float)RAND_MAX - 0.5f;
+                    float dirY = (float)std::rand() / (float)RAND_MAX - 0.2f;
+                    s.vx = dirX * 320.0f;
+                    s.vy = -100.0f + dirY * 100.0f;
+                    s.ax = 0.0f;
+                    s.ay = 750.0f;
+
+                    s.size = 8.0f + ((float)std::rand() / (float)RAND_MAX) * 18.0f;
+                    s.angle = ((float)std::rand() / (float)RAND_MAX) * 6.2831853f;
+                    s.angularVelocity = -5.0f + ((float)std::rand() / (float)RAND_MAX) * 10.0f;
+                    s.life = 0.0f;
+                    s.maxLife = 2.0f + ((float)std::rand() / (float)RAND_MAX) * 0.8f;
+                    s.r = losingPaddle->colorR;
+                    s.g = losingPaddle->colorG;
+                    s.b = losingPaddle->colorB;
+                    s.active = true;
+                }
+            }
+
+            loseWispCount = MaxLoseWisps;
+            for (int i = 0; i < loseWispCount; ++i) {
+                LoseWisp& w = loseWisps[i];
+                float t = (float)i / (float)(loseWispCount > 0 ? loseWispCount : 1);
+
+                float baseX = paddle1 ? paddle1->x + paddle1->width * 0.5f : (float)width * 0.25f;
+                float baseY = paddle1 ? paddle1->y + paddle1->height * 0.5f : (float)height * 0.5f;
+
+                w.x = baseX + (t - 0.5f) * 100.0f;
+                w.y = baseY + 30.0f;
+                w.vx = ((float)std::rand() / (float)RAND_MAX - 0.5f) * 60.0f;
+                w.vy = -60.0f - ((float)std::rand() / (float)RAND_MAX) * 60.0f;
+                w.life = 0.0f;
+                w.maxLife = 2.5f + ((float)std::rand() / (float)RAND_MAX) * 1.5f;
+
+                float cool = 0.5f + 0.5f * t;
+                w.r = paddle1 ? paddle1->colorR * 0.5f * cool : 0.5f * cool;
+                w.g = paddle1 ? paddle1->colorG * 0.7f * cool : 0.6f * cool;
+                w.b = paddle1 ? paddle1->colorB : 1.0f;
+                w.active = true;
+            }
+        } else {
+            winDanceActive = true;
+            winDanceTimer = 0.0;
+
+            Paddle* winner = (lastWinner == 1) ? paddle1 : paddle2;
+            if (winner) {
+                winPaddleStartX = winner->x + winner->width * 0.5f;
+                winPaddleStartY = winner->y + winner->height * 0.5f;
+            } else {
+                winPaddleStartX = (float)width * 0.25f;
+                winPaddleStartY = (float)height * 0.5f;
+            }
+            winPaddleLandingX = (float)width * 0.5f;
+            winPaddleLandingY = (float)height * 0.5f;
+
+            orbitBallCount = MaxOrbitBalls;
+            for (int i = 0; i < orbitBallCount; ++i) {
+                OrbitBall& ob = orbitBalls[i];
+                float t = (float)i / (float)orbitBallCount;
+                ob.angle = t * 6.2831853f;
+                ob.radius = 70.0f + 20.0f * std::sin(t * 6.2831853f);
+                ob.speed = 1.4f + 0.3f * ((float)std::rand() / (float)RAND_MAX);
+                ob.size = 6.0f + 4.0f * ((float)std::rand() / (float)RAND_MAX);
+
+                float h = t;
+                float r, g, b;
+                hsvToRgb(h, 0.9f, 1.0f, r, g, b);
+                ob.r = r;
+                ob.g = g;
+                ob.b = b;
+            }
+        }
+    }
+
     // Check competitive win condition if enabled
-    if (!endlessMode && targetScore > 0) {
+    if (!endlessMode && targetScore > 0 && !gameOver) {
         if (score1 >= targetScore || score2 >= targetScore) {
+            koWin = false;
             gameOver = true;
             paused = true;
 
@@ -1362,6 +1581,129 @@ void Game::render() {
         glColor4f(mr, mg, mb, 1.0f);
         drawText(modeX, modeY, modeScale, modeText);
 
+        // Health bars near each paddle
+        if (fxEnabled) {
+            float barWidth = 80.0f;
+            float barHeight = 10.0f;
+            float barPadding = 2.0f;
+
+            // P1 health bar (left side)
+            float p1BarX = paddle1->x + paddle1->width + 15.0f;
+            float p1BarY = paddle1->y + paddle1->height * 0.5f - barHeight * 0.5f;
+
+            // Background
+            glBegin(GL_QUADS);
+            glColor4f(0.2f, 0.2f, 0.2f, 0.8f);
+            glVertex2f(p1BarX - barPadding, p1BarY - barPadding);
+            glVertex2f(p1BarX + barWidth + barPadding, p1BarY - barPadding);
+            glVertex2f(p1BarX + barWidth + barPadding, p1BarY + barHeight + barPadding);
+            glVertex2f(p1BarX - barPadding, p1BarY + barHeight + barPadding);
+            glEnd();
+
+            // Health fill with color shift (green to yellow to red)
+            float p1Ratio = (float)health1 / (float)MaxHealth;
+            float p1FillWidth = barWidth * p1Ratio;
+            float p1Hue = p1Ratio * 0.33f; // 0.33 = green, 0 = red
+            float p1r, p1g, p1b;
+            hsvToRgb(p1Hue, 0.9f, 1.0f, p1r, p1g, p1b);
+
+            // Animated pulse when low health
+            float p1Pulse = 1.0f;
+            if (health1 <= 2) {
+                p1Pulse = 0.7f + 0.3f * std::sin((float)labelTimer * 8.0f);
+            }
+
+            glBegin(GL_QUADS);
+            glColor4f(p1r * p1Pulse, p1g * p1Pulse, p1b * p1Pulse, 1.0f);
+            glVertex2f(p1BarX, p1BarY);
+            glVertex2f(p1BarX + p1FillWidth, p1BarY);
+            glVertex2f(p1BarX + p1FillWidth, p1BarY + barHeight);
+            glVertex2f(p1BarX, p1BarY + barHeight);
+            glEnd();
+
+            // P2 health bar (right side)
+            float p2BarX = paddle2->x - 15.0f - barWidth;
+            float p2BarY = paddle2->y + paddle2->height * 0.5f - barHeight * 0.5f;
+
+            // Background
+            glBegin(GL_QUADS);
+            glColor4f(0.2f, 0.2f, 0.2f, 0.8f);
+            glVertex2f(p2BarX - barPadding, p2BarY - barPadding);
+            glVertex2f(p2BarX + barWidth + barPadding, p2BarY - barPadding);
+            glVertex2f(p2BarX + barWidth + barPadding, p2BarY + barHeight + barPadding);
+            glVertex2f(p2BarX - barPadding, p2BarY + barHeight + barPadding);
+            glEnd();
+
+            // Health fill
+            float p2Ratio = (float)health2 / (float)MaxHealth;
+            float p2FillWidth = barWidth * p2Ratio;
+            float p2Hue = p2Ratio * 0.33f;
+            float p2r, p2g, p2b;
+            hsvToRgb(p2Hue, 0.9f, 1.0f, p2r, p2g, p2b);
+
+            float p2Pulse = 1.0f;
+            if (health2 <= 2) {
+                p2Pulse = 0.7f + 0.3f * std::sin((float)labelTimer * 8.0f);
+            }
+
+            glBegin(GL_QUADS);
+            glColor4f(p2r * p2Pulse, p2g * p2Pulse, p2b * p2Pulse, 1.0f);
+            glVertex2f(p2BarX + barWidth - p2FillWidth, p2BarY);
+            glVertex2f(p2BarX + barWidth, p2BarY);
+            glVertex2f(p2BarX + barWidth, p2BarY + barHeight);
+            glVertex2f(p2BarX + barWidth - p2FillWidth, p2BarY + barHeight);
+            glEnd();
+
+            // Boost meters (smaller, below health bars)
+            float boostBarWidth = 60.0f;
+            float boostBarHeight = 6.0f;
+            float boostYOffset = 18.0f;
+
+            // P1 boost bar
+            float b1X = paddle1->x + paddle1->width + 15.0f;
+            float b1Y = paddle1->y + paddle1->height * 0.5f + boostYOffset;
+
+            glBegin(GL_QUADS);
+            glColor4f(0.15f, 0.15f, 0.2f, 0.7f);
+            glVertex2f(b1X - 1, b1Y - 1);
+            glVertex2f(b1X + boostBarWidth + 1, b1Y - 1);
+            glVertex2f(b1X + boostBarWidth + 1, b1Y + boostBarHeight + 1);
+            glVertex2f(b1X - 1, b1Y + boostBarHeight + 1);
+            glEnd();
+
+            float b1Fill = boostBarWidth * boostMeter1;
+            float b1Glow = boostActive1 ? (0.8f + 0.2f * std::sin((float)labelTimer * 12.0f)) : 1.0f;
+            glBegin(GL_QUADS);
+            glColor4f(0.2f * b1Glow, 0.6f * b1Glow, 1.0f * b1Glow, 1.0f);
+            glVertex2f(b1X, b1Y);
+            glVertex2f(b1X + b1Fill, b1Y);
+            glVertex2f(b1X + b1Fill, b1Y + boostBarHeight);
+            glVertex2f(b1X, b1Y + boostBarHeight);
+            glEnd();
+
+            // P2 boost bar
+            float b2X = paddle2->x - 15.0f - boostBarWidth;
+            float b2Y = paddle2->y + paddle2->height * 0.5f + boostYOffset;
+
+            glBegin(GL_QUADS);
+            glColor4f(0.15f, 0.15f, 0.2f, 0.7f);
+            glVertex2f(b2X - 1, b2Y - 1);
+            glVertex2f(b2X + boostBarWidth + 1, b2Y - 1);
+            glVertex2f(b2X + boostBarWidth + 1, b2Y + boostBarHeight + 1);
+            glVertex2f(b2X - 1, b2Y + boostBarHeight + 1);
+            glEnd();
+
+            float b2Fill = boostBarWidth * boostMeter2;
+            float b2Glow = boostActive2 ? (0.8f + 0.2f * std::sin((float)labelTimer * 12.0f)) : 1.0f;
+            glBegin(GL_QUADS);
+            glColor4f(0.2f * b2Glow, 0.6f * b2Glow, 1.0f * b2Glow, 1.0f);
+            glVertex2f(b2X + boostBarWidth - b2Fill, b2Y);
+            glVertex2f(b2X + boostBarWidth, b2Y);
+            glVertex2f(b2X + boostBarWidth, b2Y + boostBarHeight);
+            glVertex2f(b2X + boostBarWidth - b2Fill, b2Y + boostBarHeight);
+            glEnd();
+        }
+
         // Player labels near paddles
         if (labelTimer < 3.0) {
             float labelScale = 14.0f;
@@ -1471,6 +1813,31 @@ void Game::render() {
                     glEnd();
                 }
 
+                // Radial glow backdrop (rendered before animations)
+                if (fxEnabled) {
+                    float t = (float)winLoseTimer;
+                    float pulse = 0.7f + 0.3f * std::sin(t * 3.5f);
+                    float radius = (float)width * 0.25f + pulse * 30.0f;
+                    float alpha = 0.4f;
+
+                    float glowR = accentR * (lastAiWin ? 0.7f : 1.4f);
+                    float glowG = accentG * (lastAiWin ? 0.3f : 1.4f);
+                    float glowB = accentB * (lastAiWin ? 0.5f : 1.4f);
+
+                    glBegin(GL_TRIANGLE_FAN);
+                    glColor4f(glowR, glowG, glowB, alpha);
+                    glVertex2f(centerX, centerY);
+                    int segments = 40;
+                    for (int i = 0; i <= segments; ++i) {
+                        float ang = (float)i / (float)segments * 6.2831853f;
+                        float px2 = centerX + std::cos(ang) * radius;
+                        float py2 = centerY + std::sin(ang) * radius;
+                        glColor4f(glowR, glowG, glowB, 0.0f);
+                        glVertex2f(px2, py2);
+                    }
+                    glEnd();
+                }
+
                 if (lastAiWin && loseShatterActive) {
                     for (int i = 0; i < loseShardCount; ++i) {
                         const LoseShard& s = loseShards[i];
@@ -1532,34 +1899,17 @@ void Game::render() {
                     }
                 }
 
-                // Radial glow behind title
-                if (fxEnabled) {
-                    float t = (float)winLoseTimer;
-                    float pulse = 0.7f + 0.3f * std::sin(t * 3.5f);
-                    float radius = (float)width * 0.25f + pulse * 30.0f;
-                    float alpha = 0.9f;
-
-                    float glowR = accentR * (lastAiWin ? 0.7f : 1.4f);
-                    float glowG = accentG * (lastAiWin ? 0.3f : 1.4f);
-                    float glowB = accentB * (lastAiWin ? 0.5f : 1.4f);
-
-                    glBegin(GL_TRIANGLE_FAN);
-                    glColor4f(glowR, glowG, glowB, alpha);
-                    glVertex2f(centerX, centerY);
-                    int segments = 40;
-                    for (int i = 0; i <= segments; ++i) {
-                        float ang = (float)i / (float)segments * 6.2831853f;
-                        float px2 = centerX + std::cos(ang) * radius;
-                        float py2 = centerY + std::sin(ang) * radius;
-                        glColor4f(glowR, glowG, glowB, 0.0f);
-                        glVertex2f(px2, py2);
-                    }
-                    glEnd();
-                }
-
                 // Determine title text
                 const char* title = "GAME OVER";
-                if (singlePlayer) {
+                const char* subtitle = nullptr;
+                if (koWin) {
+                    title = "K.O.!";
+                    if (singlePlayer) {
+                        subtitle = lastAiWin ? "YOU LOSE" : "YOU WIN";
+                    } else {
+                        subtitle = (lastWinner == 1) ? "PLAYER 1 WINS" : "PLAYER 2 WINS";
+                    }
+                } else if (singlePlayer) {
                     if (lastAiWin) {
                         title = "YOU LOSE";
                     } else if (lastWinner == 1) {
@@ -1573,26 +1923,45 @@ void Game::render() {
                     }
                 }
 
-                float baseScale = lastAiWin ? 26.0f : 30.0f;
-                float pulse = 1.0f + 0.08f * std::sin((float)winLoseTimer * 4.0f);
+                float baseScale = koWin ? 40.0f : (lastAiWin ? 26.0f : 30.0f);
+                float pulse = 1.0f + (koWin ? 0.15f : 0.08f) * std::sin((float)winLoseTimer * (koWin ? 6.0f : 4.0f));
                 float titleScale = baseScale * pulse;
 
                 float titleWidth = measureText(titleScale, title);
                 float tx = centerX - titleWidth * 0.5f;
-                float ty = centerY - titleScale * 1.2f;
+                float ty = centerY - titleScale * (koWin ? 1.8f : 1.2f);
 
                 // Drop shadow for pseudo-3D depth
-                float shadowOffset = 3.0f;
+                float shadowOffset = koWin ? 4.0f : 3.0f;
                 glColor4f(0.0f, 0.0f, 0.0f, 0.8f);
                 drawText(tx + shadowOffset, ty + shadowOffset, titleScale, title);
 
-                // Main title color
-                if (lastAiWin) {
+                // Main title color - KO is dramatic red/orange
+                if (koWin) {
+                    float koFlash = 0.7f + 0.3f * std::sin((float)winLoseTimer * 10.0f);
+                    glColor4f(1.0f * koFlash, 0.3f * koFlash, 0.1f, 1.0f);
+                } else if (lastAiWin) {
                     glColor4f(accentR * 1.4f, accentG * 0.3f, accentB * 0.4f, 1.0f);
                 } else {
                     glColor4f(accentR * 1.4f, accentG * 1.4f, accentB * 1.4f, 1.0f);
                 }
                 drawText(tx, ty, titleScale, title);
+
+                // KO subtitle (winner info)
+                if (koWin && subtitle) {
+                    float subScale = 20.0f;
+                    float subWidth = measureText(subScale, subtitle);
+                    float subX = centerX - subWidth * 0.5f;
+                    float subY = ty + titleScale * 0.9f;
+                    glColor4f(0.0f, 0.0f, 0.0f, 0.7f);
+                    drawText(subX + 2.0f, subY + 2.0f, subScale, subtitle);
+                    if (lastAiWin) {
+                        glColor4f(0.9f, 0.4f, 0.4f, 1.0f);
+                    } else {
+                        glColor4f(0.4f, 1.0f, 0.5f, 1.0f);
+                    }
+                    drawText(subX, subY, subScale, subtitle);
+                }
 
                 // Final score under title
                 char scoreText[32];
@@ -1729,12 +2098,15 @@ void Game::render() {
                     }
                 }
 
-                const char* items[7] = {
+                const char* items[10] = {
                     "RESUME",
                     "FIRST TO 15",
                     "FIRST TO 30",
                     "P1 VS P2",
                     "ENDLESS MODE",
+                    nullptr,
+                    nullptr,
+                    nullptr,
                     nullptr,
                     "QUIT"
                 };
@@ -1742,12 +2114,25 @@ void Game::render() {
                 float menuScale = 18.0f;
                 float startY = y + pausedScale * (gameOver ? 2.4f : 1.8f);
 
-                for (int i = 0; i < 7; ++i) {
+                for (int i = 0; i < 10; ++i) {
                     const char* label = items[i];
                     char fxLabel[32];
+                    char diffLabel[32];
+                    char boostLabel[32];
+                    char sideLabel[32];
                     if (i == 5) {
                         std::snprintf(fxLabel, sizeof(fxLabel), fxEnabled ? "VISUAL FX: ON" : "VISUAL FX: OFF");
                         label = fxLabel;
+                    } else if (i == 6) {
+                        const char* diffNames[] = { "EASY", "MEDIUM", "HARD" };
+                        std::snprintf(diffLabel, sizeof(diffLabel), "AI: %s", diffNames[aiDifficulty]);
+                        label = diffLabel;
+                    } else if (i == 7) {
+                        std::snprintf(boostLabel, sizeof(boostLabel), autoBoostEnabled ? "BOOST: AUTO" : "BOOST: MANUAL");
+                        label = boostLabel;
+                    } else if (i == 8) {
+                        std::snprintf(sideLabel, sizeof(sideLabel), playerSide == 1 ? "SIDE: LEFT" : "SIDE: RIGHT");
+                        label = sideLabel;
                     }
 
                     float w = measureText(menuScale, label);

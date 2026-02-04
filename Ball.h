@@ -10,7 +10,9 @@ public:
     void reset(float cx, float cy);
     void update(double dt, int screenW, int screenH,
                 const Paddle& p1, const Paddle& p2,
-                int& score1, int& score2);
+                int& score1, int& score2,
+                int& health1, int& health2,
+                float& boost1, float& boost2);
     void render() const;
 
 public:
@@ -25,4 +27,7 @@ public:
     float lastScoreX;
     float lastScoreY;
     int radius;
+
+    bool isPiercing = false;
+    int wallBounceCount = 0;
 };
