@@ -1,0 +1,15 @@
+- Win/Lose screen Refinement:
+
+Old win/lose screen designs are now overlapping with the new ones. The big glowing blob with the redundant score count at the center of the screen still shows up over the new animations, making the new animations barely visible. Must remove old screen animations to make the new ones clear.
+
+- Difficulty Mechanic adjustments + New Ricochet Mechanic:
+
+Make enemy paddles move faster for a more competitive edge. Improve the enemy AI's ball tracking algorithm to better predict the balls' trajectories in motion.
+
+Add a responsive speed boost to the ball. The more back and forth the ball has between the two paddles, the faster the ball gets. Also boost speed if the ball ricochets off walls, but if it ricochets off the wall, then the ball turns red and piercing, and if it comes in contact with any paddle, that paddle takes damage.
+
+(...and yes, this means I'm adding a health system to the game). Players can either win by playing to reach the score limit first or by taking advantage of 'red ricochets' to deplete the opponent's health to win by K.O. (That also means we're gonna need to add win by KO win/lose screens)
+
+Keeping in line with the ball's increased speed, there needs to be a way for players to fairly still be able to keep up with the high-speed ricochets. So I got the idea of creating a boost mechanic.  I figured I could add a system where the ricochets add energy to a small 'boost meter' that progressively boosts the speed of the player's paddle. This boost will either be activated automatically after a player-to-player ball ricochet until their meter burns away, or we could add a boost button that players must hold while moving to increase their speed until their meter burns out. (We should experiment with both approaches to see which feels more fun to players after playtests.)
+
+(Overall new goal: potentially turn this into PingPong with fighting game elements)
