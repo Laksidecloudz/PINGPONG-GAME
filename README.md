@@ -1,6 +1,6 @@
 # 👋 Welcome to My GitHub Profile
 
-Hi there! I'm **Laksidecloudz**, a passionate developer interested in **game development** and **3D graphics programming**. I love building projects from scratch and exploring the depths of modern programming challenges.
+Hi there! I'm Koveka aka **Laksidecloudz**, a passionate developer interested in **game development** and **3D graphics programming**. I love building projects from scratch and exploring the depths of modern programming challenges.
 
 ## 🎮 Featured Projects
 
