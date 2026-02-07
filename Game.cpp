@@ -1543,8 +1543,8 @@ void Game::update(double dt) {
                 LoseWisp& w = loseWisps[i];
                 float t = (float)i / (float)(loseWispCount > 0 ? loseWispCount : 1);
 
-                float baseX = paddle1 ? paddle1->x + paddle1->width * 0.5f : (float)width * 0.25f;
-                float baseY = paddle1 ? paddle1->y + paddle1->height * 0.5f : (float)height * 0.5f;
+                float baseX = losingPaddle ? losingPaddle->x + losingPaddle->width * 0.5f : (float)width * 0.25f;
+                float baseY = losingPaddle ? losingPaddle->y + losingPaddle->height * 0.5f : (float)height * 0.5f;
 
                 w.x = baseX + (t - 0.5f) * 100.0f;
                 w.y = baseY + 30.0f;
@@ -1554,9 +1554,9 @@ void Game::update(double dt) {
                 w.maxLife = 2.5f + ((float)std::rand() / (float)RAND_MAX) * 1.5f;
 
                 float cool = 0.5f + 0.5f * t;
-                w.r = paddle1 ? paddle1->colorR * 0.5f * cool : 0.5f * cool;
-                w.g = paddle1 ? paddle1->colorG * 0.7f * cool : 0.6f * cool;
-                w.b = paddle1 ? paddle1->colorB : 1.0f;
+                w.r = losingPaddle ? losingPaddle->colorR * 0.5f * cool : 0.5f * cool;
+                w.g = losingPaddle ? losingPaddle->colorG * 0.7f * cool : 0.6f * cool;
+                w.b = losingPaddle ? losingPaddle->colorB : 1.0f;
                 w.active = true;
             }
         } else {
@@ -1660,9 +1660,9 @@ void Game::update(double dt) {
 
                     float baseX;
                     float baseY;
-                    if (paddle1) {
-                        baseX = paddle1->x + paddle1->width * 0.5f;
-                        baseY = paddle1->y + paddle1->height * 0.5f;
+                    if (losingPaddle) {
+                        baseX = losingPaddle->x + losingPaddle->width * 0.5f;
+                        baseY = losingPaddle->y + losingPaddle->height * 0.5f;
                     } else {
                         baseX = (float)width * 0.25f;
                         baseY = (float)height * 0.5f;
@@ -1676,10 +1676,10 @@ void Game::update(double dt) {
                     w.maxLife = 2.0f + ((float)std::rand() / (float)RAND_MAX) * 1.0f;
 
                     float cool = 0.5f + 0.5f * t;
-                    if (paddle1) {
-                        w.r = paddle1->colorR * 0.5f * cool;
-                        w.g = paddle1->colorG * 0.7f * cool;
-                        w.b = paddle1->colorB;
+                    if (losingPaddle) {
+                        w.r = losingPaddle->colorR * 0.5f * cool;
+                        w.g = losingPaddle->colorG * 0.7f * cool;
+                        w.b = losingPaddle->colorB;
                     } else {
                         w.r = 0.5f * cool;
                         w.g = 0.6f * cool;
