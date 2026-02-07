@@ -1193,6 +1193,54 @@ void Game::update(double dt) {
             targetY = ball->y * (1.0f - driftBlend) + readyY * driftBlend;
         }
 
+        // AI shield pickup seeking - runs BEFORE dodge logic so it can override
+        // Works in BOTH movement modes
+        bool seekingShield = false;
+        float shieldTargetY = targetY;
+        float shieldTargetX = aiPaddle->x; // Only used in free movement
+        bool shieldOverrideDodge = false;
+        
+        if (shieldEnabled && gameMode == MODE_BATTLE && ball->isPiercing && freeMovement) {
+            ShieldPickup& aiPickup = (playerSide == 1) ? shieldPickup2 : shieldPickup1;
+            bool aiHasShield = (playerSide == 1) ? shieldHeld2 : shieldHeld1;
+            if (aiPickup.active && !aiHasShield) {
+                float pickupCenterY = aiPickup.y;
+                float pickupCenterX = aiPickup.x;
+                float padCenterY = aiPaddle->y + aiPaddle->height * 0.5f;
+                float padCenterX = aiPaddle->x + aiPaddle->width * 0.5f;
+                float distY = std::fabs(pickupCenterY - padCenterY);
+                float distX = std::fabs(pickupCenterX - padCenterX);
+                float distTotal = std::sqrt(distX * distX + distY * distY);
+                
+                switch (aiDifficulty) {
+                    case AI_EASY:
+                        // Easy AI doesn't understand shield importance
+                        seekingShield = false;
+                        break;
+                    case AI_MEDIUM: {
+                        // Medium AI seeks when pickup is reasonably close
+                        // More aggressive when health is low
+                        float seekRange = (aiHealth <= 2) ? 400.0f : 250.0f;
+                        seekingShield = (distTotal < seekRange);
+                        // Override dodge when critically low health
+                        shieldOverrideDodge = (aiHealth <= 2) && (distTotal < 300.0f);
+                        break;
+                    }
+                    case AI_HARD:
+                        // Hard AI always seeks aggressively
+                        seekingShield = true;
+                        // Only override dodge if shield is very close and worth the risk
+                        shieldOverrideDodge = (distTotal < 150.0f) || (aiHealth <= 2);
+                        break;
+                }
+                
+                if (seekingShield) {
+                    shieldTargetY = pickupCenterY;
+                    shieldTargetX = pickupCenterX;
+                }
+            }
+        }
+
         // Red ball avoidance in Battle Mode
         bool shouldDodge = false;
         if (gameMode == MODE_BATTLE && ball->isPiercing && ballMovingTowardAI) {
@@ -1203,11 +1251,16 @@ void Game::update(double dt) {
                     break;
                 case AI_MEDIUM:
                     // Medium AI dodges when health critical or many wall bounces
-                    shouldDodge = (aiHealth <= 2) || (ball->wallBounceCount >= 3);
+                    // But if we're seeking shield and health is critical, shield takes priority
+                    if (!shieldOverrideDodge) {
+                        shouldDodge = (aiHealth <= 2) || (ball->wallBounceCount >= 3);
+                    }
                     break;
                 case AI_HARD:
-                    // Hard AI always dodges red balls
-                    shouldDodge = true;
+                    // Hard AI always dodges unless shield override
+                    if (!shieldOverrideDodge) {
+                        shouldDodge = true;
+                    }
                     break;
             }
         }
@@ -1227,6 +1280,18 @@ void Game::update(double dt) {
             if (targetY > screenH - halfH) targetY = screenH - halfH;
         }
 
+        // If seeking shield, override targetY with shield position
+        // But blend if both dodge and shield seeking are active
+        if (seekingShield) {
+            if (shouldDodge && !shieldOverrideDodge) {
+                // Blend: 60% toward shield, 40% dodge direction
+                targetY = shieldTargetY * 0.6f + targetY * 0.4f;
+            } else {
+                // Full shield seeking
+                targetY = shieldTargetY;
+            }
+        }
+
         float diff = targetY - paddleCenterY;
 
         float maxSpeed = aiPaddle->speed * speedMult;
@@ -1242,7 +1307,12 @@ void Game::update(double dt) {
                 ? (float)(width - 40 - aiPaddle->width)
                 : 40.0f;
             float advanceTarget = aiDefaultX;
-            if (ballMovingTowardAI && !shouldDodge) {
+            
+            // If seeking shield, prioritize moving toward shield X
+            if (seekingShield) {
+                // Override normal tracking - move directly toward pickup
+                advanceTarget = shieldTargetX;
+            } else if (ballMovingTowardAI && !shouldDodge) {
                 float advanceFraction = 0.0f;
                 switch (aiDifficulty) {
                     case AI_EASY:   advanceFraction = 0.05f; break;
@@ -1256,47 +1326,12 @@ void Game::update(double dt) {
                 float centerX = (float)width * 0.5f;
                 advanceTarget = aiDefaultX + (centerX - aiDefaultX) * advanceFraction;
             }
+            
             float hDiff = advanceTarget - (aiPaddle->x + aiPaddle->width * 0.5f);
             float hSpeed = hDiff * reactionMult;
             if (hSpeed > maxSpeed) hSpeed = maxSpeed;
             if (hSpeed < -maxSpeed) hSpeed = -maxSpeed;
             aiPaddle->setHorizontalSpeed(hSpeed);
-
-            // AI shield pickup seeking (overrides normal tracking when seeking)
-            if (shieldEnabled && gameMode == MODE_BATTLE && ball->isPiercing) {
-                ShieldPickup& aiPickup = (playerSide == 1) ? shieldPickup2 : shieldPickup1;
-                bool aiHasShield = (playerSide == 1) ? shieldHeld2 : shieldHeld1;
-                if (aiPickup.active && !aiHasShield) {
-                    bool seekPickup = false;
-                    switch (aiDifficulty) {
-                        case AI_EASY: seekPickup = false; break;
-                        case AI_MEDIUM: {
-                            float dist = std::fabs(aiPickup.y - (aiPaddle->y + aiPaddle->height * 0.5f));
-                            seekPickup = (ballMovingTowardAI && dist < 150.0f);
-                            break;
-                        }
-                        case AI_HARD: seekPickup = true; break;
-                    }
-                    if (seekPickup) {
-                        float pickupCenterY = aiPickup.y;
-                        float padCenterY = aiPaddle->y + aiPaddle->height * 0.5f;
-                        float dy2 = pickupCenterY - padCenterY;
-                        float seekVy = dy2 * 4.0f;
-                        float maxSp = aiPaddle->speed * 0.8f;
-                        if (seekVy > maxSp) seekVy = maxSp;
-                        if (seekVy < -maxSp) seekVy = -maxSp;
-                        aiPaddle->setVerticalSpeed(seekVy);
-
-                        float pickupCenterX = aiPickup.x;
-                        float padCenterX = aiPaddle->x + aiPaddle->width * 0.5f;
-                        float dx2 = pickupCenterX - padCenterX;
-                        float seekVx = dx2 * 4.0f;
-                        if (seekVx > maxSp) seekVx = maxSp;
-                        if (seekVx < -maxSp) seekVx = -maxSp;
-                        aiPaddle->setHorizontalSpeed(seekVx);
-                    }
-                }
-            }
         } else {
             aiPaddle->setHorizontalSpeed(0.0f);
         }
@@ -2457,6 +2492,18 @@ void Game::render() {
                         { cx - sz,     cy - sz * 0.3f }  // upper-left
                     };
 
+                    // Blinking aura ring (~2Hz, alpha oscillates between visible and near-invisible)
+                    float blinkAlpha = 0.5f + 0.5f * std::sin(pickup.bobTimer * 12.56637f); // 2Hz = 4π rad/s
+                    float auraR = 18.0f + 2.0f * pulse; // larger than glow
+                    glBegin(GL_LINE_LOOP);
+                    glColor4f(0.5f, 1.0f, 0.7f, 0.6f * blinkAlpha);
+                    int auraSegs = 24;
+                    for (int i = 0; i < auraSegs; ++i) {
+                        float ang = (float)i / (float)auraSegs * 6.2831853f;
+                        glVertex2f(cx + std::cos(ang) * (sz + auraR), cy + std::sin(ang) * (sz + auraR));
+                    }
+                    glEnd();
+
                     // Outer glow
                     float glowR = 12.0f;
                     glBegin(GL_TRIANGLE_FAN);
@@ -2498,28 +2545,28 @@ void Game::render() {
             auto drawShieldIndicator = [&](Paddle* pad, bool held) {
                 if (!pad || !held) return;
                 float pulse = 0.6f + 0.4f * std::sin((float)labelTimer * 6.0f);
-                float alpha = 0.4f * pulse;
+                float alpha = 0.7f * pulse; // increased from 0.4f
                 bool isLeft = (pad->upKey == SDL_SCANCODE_W);
-                float bx = isLeft ? (pad->x + pad->width + 2.0f) : (pad->x - 6.0f);
-                float by0 = pad->y - 4.0f;
-                float by1 = pad->y + pad->height + 4.0f;
-                float bw = 4.0f;
-                // Barrier quad on paddle face
+                float bx = isLeft ? (pad->x + pad->width + 3.0f) : (pad->x - 9.0f); // widened positioning
+                float by0 = pad->y - 6.0f; // extended vertically
+                float by1 = pad->y + pad->height + 6.0f;
+                float bw = 6.0f; // widened from 4.0f
+                // Barrier quad on paddle face - brighter colors
                 glBegin(GL_QUADS);
-                glColor4f(0.4f, 1.0f, 0.6f, alpha);
+                glColor4f(0.5f, 1.0f, 0.7f, alpha); // brighter green
                 glVertex2f(bx, by0);
                 glVertex2f(bx + bw, by0);
-                glColor4f(0.2f, 0.9f, 1.0f, alpha * 0.7f);
+                glColor4f(0.3f, 0.95f, 1.0f, alpha * 0.8f); // brighter cyan
                 glVertex2f(bx + bw, by1);
                 glVertex2f(bx, by1);
                 glEnd();
-                // Outer glow
-                float glowW = 8.0f;
+                // Outer glow - expanded from 8px to 14px
+                float glowW = 14.0f;
                 glBegin(GL_QUADS);
-                glColor4f(0.3f, 0.9f, 0.7f, alpha * 0.3f);
+                glColor4f(0.4f, 0.95f, 0.8f, alpha * 0.4f); // brighter glow
                 glVertex2f(bx, by0);
                 glVertex2f(bx + bw, by0);
-                glColor4f(0.2f, 0.8f, 1.0f, 0.0f);
+                glColor4f(0.3f, 0.85f, 1.0f, 0.0f);
                 if (isLeft) {
                     glVertex2f(bx + bw + glowW, by1);
                     glVertex2f(bx + bw + glowW, by0);
