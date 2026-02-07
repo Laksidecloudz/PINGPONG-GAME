@@ -40,7 +40,7 @@ void Ball::update(double dt, int screenW, int screenH,
                   int& health1, int& health2,
                   float& boost1, float& boost2,
                   bool battleMode,
-                  bool shield1Active, bool shield2Active) {
+                  bool& shield1Held, bool& shield2Held) {
     x += velX * (float)dt;
     y += velY * (float)dt;
 
@@ -137,8 +137,9 @@ void Ball::update(double dt, int screenW, int screenH,
         // Deal damage if ball was piercing (red ricochet) - Battle Mode only
         // Shield blocks piercing damage and adds speed boost
         if (battleMode && isPiercing) {
-            if (shield1Active) {
-                // Shield deflect: no damage, speed boost
+            if (shield1Held) {
+                // Shield deflect: consume shield, no damage, speed boost
+                shield1Held = false;
                 float spd = std::sqrt(velX * velX + velY * velY);
                 if (spd > 0.0f) {
                     float boosted = spd * 1.3f;
@@ -191,8 +192,9 @@ void Ball::update(double dt, int screenW, int screenH,
         // Deal damage if ball was piercing (red ricochet) - Battle Mode only
         // Shield blocks piercing damage and adds speed boost
         if (battleMode && isPiercing) {
-            if (shield2Active) {
-                // Shield deflect: no damage, speed boost
+            if (shield2Held) {
+                // Shield deflect: consume shield, no damage, speed boost
+                shield2Held = false;
                 float spd = std::sqrt(velX * velX + velY * velY);
                 if (spd > 0.0f) {
                     float boosted = spd * 1.3f;

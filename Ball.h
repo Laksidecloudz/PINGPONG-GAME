@@ -14,7 +14,7 @@ public:
                 int& health1, int& health2,
                 float& boost1, float& boost2,
                 bool battleMode,
-                bool shield1Active = false, bool shield2Active = false);
+                bool& shield1Held, bool& shield2Held);
     void render() const;
 
 public:

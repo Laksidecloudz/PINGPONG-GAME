@@ -10,6 +10,11 @@
 
 const int Game::MaxHealthOptions[4] = { 5, 10, 15, 20 };
 
+static inline bool aabbOverlap(float ax, float ay, float aw, float ah,
+                               float bx, float by, float bw, float bh) {
+    return (ax < bx + bw) && (ax + aw > bx) && (ay < by + bh) && (ay + ah > by);
+}
+
 static void drawChar(float x, float y, float scale, char c) {
     float s = scale;
     auto segment = [x, y, s](float x1, float y1, float x2, float y2) {
@@ -210,6 +215,67 @@ static void drawChar(float x, float y, float scale, char c) {
     case ':':
         segment(0.5f, 0.3f, 0.5f, 0.3f);
         segment(0.5f, 0.7f, 0.5f, 0.7f);
+        break;
+    case 'B':
+        segment(0.0f, 0.0f, 0.0f, 1.0f);
+        segment(0.0f, 0.0f, 0.7f, 0.0f);
+        segment(0.7f, 0.0f, 0.8f, 0.15f);
+        segment(0.8f, 0.15f, 0.8f, 0.35f);
+        segment(0.8f, 0.35f, 0.7f, 0.5f);
+        segment(0.0f, 0.5f, 0.7f, 0.5f);
+        segment(0.7f, 0.5f, 0.8f, 0.65f);
+        segment(0.8f, 0.65f, 0.8f, 0.85f);
+        segment(0.8f, 0.85f, 0.7f, 1.0f);
+        segment(0.0f, 1.0f, 0.7f, 1.0f);
+        break;
+    case 'H':
+        segment(0.0f, 0.0f, 0.0f, 1.0f);
+        segment(0.8f, 0.0f, 0.8f, 1.0f);
+        segment(0.0f, 0.5f, 0.8f, 0.5f);
+        break;
+    case 'J':
+        segment(0.8f, 0.0f, 0.8f, 0.85f);
+        segment(0.8f, 0.85f, 0.5f, 1.0f);
+        segment(0.5f, 1.0f, 0.2f, 0.85f);
+        segment(0.3f, 0.0f, 0.8f, 0.0f);
+        break;
+    case 'K':
+        segment(0.0f, 0.0f, 0.0f, 1.0f);
+        segment(0.8f, 0.0f, 0.0f, 0.5f);
+        segment(0.0f, 0.5f, 0.8f, 1.0f);
+        break;
+    case 'X':
+        segment(0.0f, 0.0f, 0.8f, 1.0f);
+        segment(0.8f, 0.0f, 0.0f, 1.0f);
+        break;
+    case 'Z':
+        segment(0.0f, 0.0f, 0.8f, 0.0f);
+        segment(0.8f, 0.0f, 0.0f, 1.0f);
+        segment(0.0f, 1.0f, 0.8f, 1.0f);
+        break;
+    case '.':
+        segment(0.4f, 0.9f, 0.6f, 0.9f);
+        segment(0.6f, 0.9f, 0.6f, 1.0f);
+        segment(0.6f, 1.0f, 0.4f, 1.0f);
+        segment(0.4f, 1.0f, 0.4f, 0.9f);
+        break;
+    case '!':
+        segment(0.5f, 0.0f, 0.5f, 0.65f);
+        segment(0.4f, 0.85f, 0.6f, 0.85f);
+        segment(0.6f, 0.85f, 0.6f, 1.0f);
+        segment(0.6f, 1.0f, 0.4f, 1.0f);
+        segment(0.4f, 1.0f, 0.4f, 0.85f);
+        break;
+    case '>':
+        segment(0.2f, 0.0f, 0.8f, 0.5f);
+        segment(0.8f, 0.5f, 0.2f, 1.0f);
+        break;
+    case '<':
+        segment(0.8f, 0.0f, 0.2f, 0.5f);
+        segment(0.2f, 0.5f, 0.8f, 1.0f);
+        break;
+    case '-':
+        segment(0.2f, 0.5f, 0.8f, 0.5f);
         break;
     case ' ':
         break;
@@ -569,8 +635,9 @@ void Game::handleEvents() {
                                     health1 = health2 = maxHealth;
                                     boostMeter1 = boostMeter2 = 0.0f;
                                     boostActive1 = boostActive2 = false;
-                                    shieldTimer1 = shieldTimer2 = 0.0f;
+                                    shieldHeld1 = shieldHeld2 = false;
                                     shieldCooldown1 = shieldCooldown2 = 0.0f;
+                                    shieldPickup1.active = shieldPickup2.active = false;
                                     boostParticleCount1 = boostParticleCount2 = 0;
                                     paddle1->x = 40.0f;
                                     paddle1->y = (float)(height - paddle1->height) * 0.5f;
@@ -707,8 +774,9 @@ void Game::handleEvents() {
                                 } else if (menuSelection == 5) {
                                     shieldEnabled = !shieldEnabled;
                                     if (!shieldEnabled) {
-                                        shieldTimer1 = shieldTimer2 = 0.0f;
+                                        shieldHeld1 = shieldHeld2 = false;
                                         shieldCooldown1 = shieldCooldown2 = 0.0f;
+                                        shieldPickup1.active = shieldPickup2.active = false;
                                     }
                                 } else if (menuSelection == 6) {
                                     maxHealthIndex = (maxHealthIndex + 1) % 4;
@@ -926,19 +994,11 @@ void Game::update(double dt) {
         }
     }
     
-    // Shield activation & cooldown (Battle Mode only when enabled)
-    if (shieldEnabled && gameMode == MODE_BATTLE) {
+    // Shield system (Battle Mode only when enabled)
+    if (shieldEnabled && gameMode == MODE_BATTLE && ball) {
         float fdt = (float)dt;
-        // Tick down active timers
-        if (shieldTimer1 > 0.0f) {
-            shieldTimer1 -= fdt;
-            if (shieldTimer1 < 0.0f) shieldTimer1 = 0.0f;
-        }
-        if (shieldTimer2 > 0.0f) {
-            shieldTimer2 -= fdt;
-            if (shieldTimer2 < 0.0f) shieldTimer2 = 0.0f;
-        }
-        // Tick down cooldowns
+
+        // Tick down cooldowns (used in fixed movement mode)
         if (shieldCooldown1 > 0.0f) {
             shieldCooldown1 -= fdt;
             if (shieldCooldown1 < 0.0f) shieldCooldown1 = 0.0f;
@@ -948,47 +1008,103 @@ void Game::update(double dt) {
             if (shieldCooldown2 < 0.0f) shieldCooldown2 = 0.0f;
         }
 
-        // Player shield activation: P1 = Space, P2 = RAlt
-        if (singlePlayer) {
-            // Player activates shield (check player's own cooldown/timer)
-            {
-                float& pShieldTimer = (playerSide == 1) ? shieldTimer1 : shieldTimer2;
-                float& pShieldCooldown = (playerSide == 1) ? shieldCooldown1 : shieldCooldown2;
-                if (keys[SDL_SCANCODE_SPACE] && pShieldCooldown <= 0.0f && pShieldTimer <= 0.0f) {
-                    pShieldTimer = ShieldDuration;
-                    pShieldCooldown = ShieldCooldown;
+        if (freeMovement) {
+            // --- COLLECTIBLE SHIELD MODE ---
+            // Spawn pickups when ball is piercing, no active pickup, player doesn't hold one
+            float pickupSize = 18.0f;
+            float floatInset = 60.0f; // how far from wall edge the pickup floats to
+
+            auto spawnPickup = [&](ShieldPickup& pickup, bool held, float xMin, float xMax) {
+                if (pickup.active || held || !ball->isPiercing) return;
+                pickup.x = xMin + ((float)(std::rand() % 100) / 100.0f) * (xMax - xMin);
+                bool fromTop = (std::rand() % 2 == 0);
+                pickup.y = fromTop ? -pickupSize : (float)height + pickupSize;
+                pickup.targetY = fromTop ? floatInset : ((float)height - floatInset);
+                pickup.bobTimer = 0.0f;
+                pickup.active = true;
+            };
+
+            float p1XMin = 0.0f;
+            float p1XMax = (float)width * 0.45f - pickupSize;
+            float p2XMin = (float)width * 0.55f;
+            float p2XMax = (float)width - pickupSize;
+
+            spawnPickup(shieldPickup1, shieldHeld1, p1XMin, p1XMax);
+            spawnPickup(shieldPickup2, shieldHeld2, p2XMin, p2XMax);
+
+            // Animate pickups sliding in and bobbing
+            auto updatePickup = [&](ShieldPickup& pickup) {
+                if (!pickup.active) return;
+                // Slide toward target Y
+                float dy = pickup.targetY - pickup.y;
+                float slideSpeed = 200.0f;
+                if (std::fabs(dy) > 1.0f) {
+                    float step = (dy > 0 ? 1.0f : -1.0f) * slideSpeed * fdt;
+                    if (std::fabs(step) > std::fabs(dy)) step = dy;
+                    pickup.y += step;
                 }
+                pickup.bobTimer += fdt;
+            };
+            updatePickup(shieldPickup1);
+            updatePickup(shieldPickup2);
+
+            // Despawn pickups if ball is no longer piercing
+            if (!ball->isPiercing) {
+                shieldPickup1.active = false;
+                shieldPickup2.active = false;
             }
-            // AI shield logic
-            Paddle* aiPaddle = (playerSide == 1) ? paddle2 : paddle1;
-            float& aiShieldTimer = (playerSide == 1) ? shieldTimer2 : shieldTimer1;
-            float& aiShieldCooldown = (playerSide == 1) ? shieldCooldown2 : shieldCooldown1;
-            if (aiShieldCooldown <= 0.0f && aiShieldTimer <= 0.0f && ball && ball->isPiercing) {
-                bool ballTowardAI = (playerSide == 1) ? (ball->velX > 0) : (ball->velX < 0);
-                if (ballTowardAI) {
-                    float dist = std::fabs(ball->x - (aiPaddle->x + aiPaddle->width * 0.5f));
-                    float triggerDist = 200.0f;
-                    bool activate = false;
-                    switch (aiDifficulty) {
-                        case AI_EASY: activate = false; break;
-                        case AI_MEDIUM: activate = (dist < triggerDist && ball->wallBounceCount >= 2); break;
-                        case AI_HARD: activate = (dist < triggerDist * 1.5f); break;
-                    }
-                    if (activate) {
-                        aiShieldTimer = ShieldDuration;
-                        aiShieldCooldown = ShieldCooldown;
-                    }
+
+            // Check paddle-pickup collection
+            auto checkCollect = [&](ShieldPickup& pickup, Paddle* pad, bool& held) {
+                if (!pickup.active || !pad || held) return;
+                float px0 = pad->x;
+                float py0 = pad->y;
+                float pw = (float)pad->width;
+                float ph = (float)pad->height;
+                float sx0 = pickup.x - pickupSize * 0.5f;
+                float sy0 = pickup.y - pickupSize * 0.5f;
+                if (aabbOverlap(px0, py0, pw, ph, sx0, sy0, pickupSize, pickupSize)) {
+                    held = true;
+                    pickup.active = false;
                 }
-            }
+            };
+            checkCollect(shieldPickup1, paddle1, shieldHeld1);
+            checkCollect(shieldPickup2, paddle2, shieldHeld2);
         } else {
-            // PvP: P1 = Space, P2 = RAlt
-            if (keys[SDL_SCANCODE_SPACE] && shieldCooldown1 <= 0.0f && shieldTimer1 <= 0.0f) {
-                shieldTimer1 = ShieldDuration;
-                shieldCooldown1 = ShieldCooldown;
-            }
-            if (keys[SDL_SCANCODE_RALT] && shieldCooldown2 <= 0.0f && shieldTimer2 <= 0.0f) {
-                shieldTimer2 = ShieldDuration;
-                shieldCooldown2 = ShieldCooldown;
+            // --- FIXED MOVEMENT: KEY-ACTIVATED ONE-USE SHIELD ---
+            if (singlePlayer) {
+                // Player activates shield
+                bool& pHeld = (playerSide == 1) ? shieldHeld1 : shieldHeld2;
+                float& pCooldown = (playerSide == 1) ? shieldCooldown1 : shieldCooldown2;
+                if (keys[SDL_SCANCODE_SPACE] && !pHeld && pCooldown <= 0.0f) {
+                    pHeld = true;
+                }
+
+                // AI activates shield
+                bool& aiHeld = (playerSide == 1) ? shieldHeld2 : shieldHeld1;
+                float& aiCooldown = (playerSide == 1) ? shieldCooldown2 : shieldCooldown1;
+                Paddle* aiPaddle = (playerSide == 1) ? paddle2 : paddle1;
+                if (!aiHeld && aiCooldown <= 0.0f && ball->isPiercing) {
+                    bool ballTowardAI = (playerSide == 1) ? (ball->velX > 0) : (ball->velX < 0);
+                    if (ballTowardAI) {
+                        float dist = std::fabs(ball->x - (aiPaddle->x + aiPaddle->width * 0.5f));
+                        bool activate = false;
+                        switch (aiDifficulty) {
+                            case AI_EASY: activate = false; break;
+                            case AI_MEDIUM: activate = (dist < 200.0f && ball->wallBounceCount >= 2); break;
+                            case AI_HARD: activate = (dist < 300.0f); break;
+                        }
+                        if (activate) aiHeld = true;
+                    }
+                }
+            } else {
+                // PvP: P1 = Space, P2 = RAlt
+                if (keys[SDL_SCANCODE_SPACE] && !shieldHeld1 && shieldCooldown1 <= 0.0f) {
+                    shieldHeld1 = true;
+                }
+                if (keys[SDL_SCANCODE_RALT] && !shieldHeld2 && shieldCooldown2 <= 0.0f) {
+                    shieldHeld2 = true;
+                }
             }
         }
     }
@@ -1145,6 +1261,42 @@ void Game::update(double dt) {
             if (hSpeed > maxSpeed) hSpeed = maxSpeed;
             if (hSpeed < -maxSpeed) hSpeed = -maxSpeed;
             aiPaddle->setHorizontalSpeed(hSpeed);
+
+            // AI shield pickup seeking (overrides normal tracking when seeking)
+            if (shieldEnabled && gameMode == MODE_BATTLE && ball->isPiercing) {
+                ShieldPickup& aiPickup = (playerSide == 1) ? shieldPickup2 : shieldPickup1;
+                bool aiHasShield = (playerSide == 1) ? shieldHeld2 : shieldHeld1;
+                if (aiPickup.active && !aiHasShield) {
+                    bool seekPickup = false;
+                    switch (aiDifficulty) {
+                        case AI_EASY: seekPickup = false; break;
+                        case AI_MEDIUM: {
+                            float dist = std::fabs(aiPickup.y - (aiPaddle->y + aiPaddle->height * 0.5f));
+                            seekPickup = (ballMovingTowardAI && dist < 150.0f);
+                            break;
+                        }
+                        case AI_HARD: seekPickup = true; break;
+                    }
+                    if (seekPickup) {
+                        float pickupCenterY = aiPickup.y;
+                        float padCenterY = aiPaddle->y + aiPaddle->height * 0.5f;
+                        float dy2 = pickupCenterY - padCenterY;
+                        float seekVy = dy2 * 4.0f;
+                        float maxSp = aiPaddle->speed * 0.8f;
+                        if (seekVy > maxSp) seekVy = maxSp;
+                        if (seekVy < -maxSp) seekVy = -maxSp;
+                        aiPaddle->setVerticalSpeed(seekVy);
+
+                        float pickupCenterX = aiPickup.x;
+                        float padCenterX = aiPaddle->x + aiPaddle->width * 0.5f;
+                        float dx2 = pickupCenterX - padCenterX;
+                        float seekVx = dx2 * 4.0f;
+                        if (seekVx > maxSp) seekVx = maxSp;
+                        if (seekVx < -maxSp) seekVx = -maxSp;
+                        aiPaddle->setHorizontalSpeed(seekVx);
+                    }
+                }
+            }
         } else {
             aiPaddle->setHorizontalSpeed(0.0f);
         }
@@ -1268,9 +1420,15 @@ void Game::update(double dt) {
         }
     }
 
-    bool s1Active = (shieldEnabled && shieldTimer1 > 0.0f);
-    bool s2Active = (shieldEnabled && shieldTimer2 > 0.0f);
-    ball->update(dt, width, height, *paddle1, *paddle2, score1, score2, health1, health2, boostMeter1, boostMeter2, gameMode == MODE_BATTLE, s1Active, s2Active);
+    // Track shield state before ball update so we can detect consumption
+    bool s1Before = shieldHeld1;
+    bool s2Before = shieldHeld2;
+    ball->update(dt, width, height, *paddle1, *paddle2, score1, score2, health1, health2, boostMeter1, boostMeter2, gameMode == MODE_BATTLE, shieldHeld1, shieldHeld2);
+    // Start cooldown when shield is consumed (fixed mode only)
+    if (!freeMovement && shieldEnabled && gameMode == MODE_BATTLE) {
+        if (s1Before && !shieldHeld1) shieldCooldown1 = ShieldCooldown;
+        if (s2Before && !shieldHeld2) shieldCooldown2 = ShieldCooldown;
+    }
     // Detect score changes to trigger a brief flash
     if (score1 != lastScore1 || score2 != lastScore2) {
         scoreFlashTimer = 0.3; // seconds
@@ -2278,22 +2436,75 @@ void Game::render() {
 
         // Shield visual effects (Battle Mode only)
         if (shieldEnabled && gameMode == MODE_BATTLE && fxEnabled) {
-            float shieldBarW = 40.0f;
-            float shieldBarH = 4.0f;
-            // Offset below boost bar
-            float shieldYOff = (gameMode == MODE_BATTLE) ? 30.0f : 20.0f;
+            float pickupSize = 18.0f;
 
-            // Shield barrier glow when active
-            auto drawShieldBarrier = [&](Paddle* pad, float timer) {
-                if (!pad || timer <= 0.0f) return;
-                float pulse = 0.6f + 0.4f * std::sin((float)labelTimer * 14.0f);
-                float alpha = 0.5f * pulse * (timer / ShieldDuration);
+            // Draw collectible shield pickups on field (free movement mode)
+            if (freeMovement) {
+                auto drawPickup = [&](const ShieldPickup& pickup) {
+                    if (!pickup.active) return;
+                    float cx = pickup.x;
+                    float cy = pickup.y + std::sin(pickup.bobTimer * 3.0f) * 5.0f;
+                    float pulse = 0.7f + 0.3f * std::sin(pickup.bobTimer * 4.0f);
+                    float sz = pickupSize * 0.5f;
+
+                    // Shield shape: chevron/pentagon pointing up
+                    // 5 points: top, upper-right, lower-right, bottom, lower-left
+                    float pts[5][2] = {
+                        { cx,          cy - sz },        // top
+                        { cx + sz,     cy - sz * 0.3f }, // upper-right
+                        { cx + sz * 0.6f, cy + sz },     // lower-right
+                        { cx - sz * 0.6f, cy + sz },     // lower-left
+                        { cx - sz,     cy - sz * 0.3f }  // upper-left
+                    };
+
+                    // Outer glow
+                    float glowR = 12.0f;
+                    glBegin(GL_TRIANGLE_FAN);
+                    glColor4f(0.3f, 0.9f, 0.5f, 0.25f * pulse);
+                    glVertex2f(cx, cy);
+                    glColor4f(0.2f, 0.8f, 0.4f, 0.0f);
+                    int glowSegs = 20;
+                    for (int i = 0; i <= glowSegs; ++i) {
+                        float ang = (float)i / (float)glowSegs * 6.2831853f;
+                        glVertex2f(cx + std::cos(ang) * (sz + glowR), cy + std::sin(ang) * (sz + glowR));
+                    }
+                    glEnd();
+
+                    // Filled shield shape
+                    glBegin(GL_TRIANGLE_FAN);
+                    glColor4f(0.3f, 1.0f, 0.6f, 0.8f * pulse);
+                    glVertex2f(cx, cy);
+                    for (int i = 0; i <= 4; ++i) {
+                        int idx = i % 5;
+                        glColor4f(0.2f, 0.85f, 0.5f, 0.7f * pulse);
+                        glVertex2f(pts[idx][0], pts[idx][1]);
+                    }
+                    glEnd();
+
+                    // Outline
+                    glLineWidth(2.0f);
+                    glBegin(GL_LINE_LOOP);
+                    glColor4f(0.5f, 1.0f, 0.8f, 0.9f * pulse);
+                    for (int i = 0; i < 5; ++i) {
+                        glVertex2f(pts[i][0], pts[i][1]);
+                    }
+                    glEnd();
+                };
+                drawPickup(shieldPickup1);
+                drawPickup(shieldPickup2);
+            }
+
+            // Shield indicator on paddle when holding a shield (both modes)
+            auto drawShieldIndicator = [&](Paddle* pad, bool held) {
+                if (!pad || !held) return;
+                float pulse = 0.6f + 0.4f * std::sin((float)labelTimer * 6.0f);
+                float alpha = 0.4f * pulse;
                 bool isLeft = (pad->upKey == SDL_SCANCODE_W);
                 float bx = isLeft ? (pad->x + pad->width + 2.0f) : (pad->x - 6.0f);
                 float by0 = pad->y - 4.0f;
                 float by1 = pad->y + pad->height + 4.0f;
                 float bw = 4.0f;
-                // Barrier quad
+                // Barrier quad on paddle face
                 glBegin(GL_QUADS);
                 glColor4f(0.4f, 1.0f, 0.6f, alpha);
                 glVertex2f(bx, by0);
@@ -2304,9 +2515,8 @@ void Game::render() {
                 glEnd();
                 // Outer glow
                 float glowW = 8.0f;
-                float gx = isLeft ? (bx + bw) : (bx - glowW);
                 glBegin(GL_QUADS);
-                glColor4f(0.3f, 0.9f, 0.7f, alpha * 0.4f);
+                glColor4f(0.3f, 0.9f, 0.7f, alpha * 0.3f);
                 glVertex2f(bx, by0);
                 glVertex2f(bx + bw, by0);
                 glColor4f(0.2f, 0.8f, 1.0f, 0.0f);
@@ -2319,62 +2529,68 @@ void Game::render() {
                 }
                 glEnd();
             };
-            drawShieldBarrier(paddle1, shieldTimer1);
-            drawShieldBarrier(paddle2, shieldTimer2);
+            drawShieldIndicator(paddle1, shieldHeld1);
+            drawShieldIndicator(paddle2, shieldHeld2);
 
-            // Shield cooldown bars
-            auto drawShieldCooldown = [&](Paddle* pad, float cooldown, float timer) {
-                if (!pad) return;
-                bool isLeft = (pad->upKey == SDL_SCANCODE_W);
-                float sx, sy;
-                if (isLeft) {
-                    sx = pad->x + pad->width + 15.0f;
-                } else {
-                    sx = pad->x - 15.0f - shieldBarW;
-                }
-                sy = pad->y + pad->height * 0.5f + shieldYOff;
+            // Fixed movement mode: cooldown bar below boost bar
+            if (!freeMovement) {
+                float shieldBarW = 40.0f;
+                float shieldBarH = 4.0f;
+                float shieldYOff = 30.0f;
 
-                // Background
-                glBegin(GL_QUADS);
-                glColor4f(0.1f, 0.15f, 0.1f, 0.6f);
-                glVertex2f(sx - 1, sy - 1);
-                glVertex2f(sx + shieldBarW + 1, sy - 1);
-                glVertex2f(sx + shieldBarW + 1, sy + shieldBarH + 1);
-                glVertex2f(sx - 1, sy + shieldBarH + 1);
-                glEnd();
+                auto drawShieldCooldown = [&](Paddle* pad, float cooldown, bool held) {
+                    if (!pad) return;
+                    bool isLeft = (pad->upKey == SDL_SCANCODE_W);
+                    float sx, sy;
+                    if (isLeft) {
+                        sx = pad->x + pad->width + 15.0f;
+                    } else {
+                        sx = pad->x - 15.0f - shieldBarW;
+                    }
+                    sy = pad->y + pad->height * 0.5f + shieldYOff;
 
-                // Fill: green when ready, dim when cooling down
-                float fill = 1.0f;
-                float r = 0.3f, g = 0.9f, b = 0.5f;
-                if (timer > 0.0f) {
-                    // Shield is active — show remaining duration
-                    fill = timer / ShieldDuration;
-                    r = 0.4f; g = 1.0f; b = 0.7f;
-                } else if (cooldown > 0.0f) {
-                    fill = 1.0f - (cooldown / ShieldCooldown);
-                    r = 0.2f; g = 0.4f; b = 0.3f;
-                }
-                float fillW = shieldBarW * fill;
-                if (isLeft) {
+                    // Background
                     glBegin(GL_QUADS);
-                    glColor4f(r, g, b, 0.9f);
-                    glVertex2f(sx, sy);
-                    glVertex2f(sx + fillW, sy);
-                    glVertex2f(sx + fillW, sy + shieldBarH);
-                    glVertex2f(sx, sy + shieldBarH);
+                    glColor4f(0.1f, 0.15f, 0.1f, 0.6f);
+                    glVertex2f(sx - 1, sy - 1);
+                    glVertex2f(sx + shieldBarW + 1, sy - 1);
+                    glVertex2f(sx + shieldBarW + 1, sy + shieldBarH + 1);
+                    glVertex2f(sx - 1, sy + shieldBarH + 1);
                     glEnd();
-                } else {
-                    glBegin(GL_QUADS);
-                    glColor4f(r, g, b, 0.9f);
-                    glVertex2f(sx + shieldBarW - fillW, sy);
-                    glVertex2f(sx + shieldBarW, sy);
-                    glVertex2f(sx + shieldBarW, sy + shieldBarH);
-                    glVertex2f(sx + shieldBarW - fillW, sy + shieldBarH);
-                    glEnd();
-                }
-            };
-            drawShieldCooldown(paddle1, shieldCooldown1, shieldTimer1);
-            drawShieldCooldown(paddle2, shieldCooldown2, shieldTimer2);
+
+                    float fill = 1.0f;
+                    float r = 0.3f, g = 0.9f, b = 0.5f;
+                    if (held) {
+                        // Shield held: full bright green
+                        fill = 1.0f;
+                        r = 0.4f; g = 1.0f; b = 0.7f;
+                    } else if (cooldown > 0.0f) {
+                        // Cooling down
+                        fill = 1.0f - (cooldown / ShieldCooldown);
+                        r = 0.2f; g = 0.4f; b = 0.3f;
+                    }
+                    float fillW = shieldBarW * fill;
+                    if (isLeft) {
+                        glBegin(GL_QUADS);
+                        glColor4f(r, g, b, 0.9f);
+                        glVertex2f(sx, sy);
+                        glVertex2f(sx + fillW, sy);
+                        glVertex2f(sx + fillW, sy + shieldBarH);
+                        glVertex2f(sx, sy + shieldBarH);
+                        glEnd();
+                    } else {
+                        glBegin(GL_QUADS);
+                        glColor4f(r, g, b, 0.9f);
+                        glVertex2f(sx + shieldBarW - fillW, sy);
+                        glVertex2f(sx + shieldBarW, sy);
+                        glVertex2f(sx + shieldBarW, sy + shieldBarH);
+                        glVertex2f(sx + shieldBarW - fillW, sy + shieldBarH);
+                        glEnd();
+                    }
+                };
+                drawShieldCooldown(paddle1, shieldCooldown1, shieldHeld1);
+                drawShieldCooldown(paddle2, shieldCooldown2, shieldHeld2);
+            }
         }
 
         // Player labels near paddles

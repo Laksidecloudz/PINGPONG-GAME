@@ -172,13 +172,21 @@ private:
     static constexpr float BoostFillAmount = 0.25f;
 
     bool shieldEnabled = true;
-    float shieldTimer1 = 0.0f;
-    float shieldTimer2 = 0.0f;
-    float shieldCooldown1 = 0.0f;
+    bool shieldHeld1 = false;
+    bool shieldHeld2 = false;
+    float shieldCooldown1 = 0.0f;  // fixed-mode: cooldown after consumption
     float shieldCooldown2 = 0.0f;
-    static constexpr float ShieldDuration = 0.5f;
-    static constexpr float ShieldCooldown = 4.0f;
+    static constexpr float ShieldCooldown = 3.0f;
     static constexpr float ShieldSpeedBoost = 1.3f;
+
+    struct ShieldPickup {
+        float x, y;
+        float targetY;       // where it floats to after spawning
+        float bobTimer;
+        bool active;
+    };
+    ShieldPickup shieldPickup1 = {0, 0, 0, 0, false};
+    ShieldPickup shieldPickup2 = {0, 0, 0, 0, false};
 
     float ballExplosionX = 0.0f;
     float ballExplosionY = 0.0f;
