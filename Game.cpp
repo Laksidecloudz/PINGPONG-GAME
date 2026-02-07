@@ -1246,8 +1246,10 @@ void Game::update(double dt) {
         }
 
         // Red ball avoidance in Battle Mode
+        // Check if AI already has a shield - if so, don't dodge (stay and block)
+        bool aiHasShield = (playerSide == 1) ? shieldHeld2 : shieldHeld1;
         bool shouldDodge = false;
-        if (gameMode == MODE_BATTLE && ball->isPiercing && ballMovingTowardAI) {
+        if (gameMode == MODE_BATTLE && ball->isPiercing && ballMovingTowardAI && !aiHasShield) {
             switch (aiDifficulty) {
                 case AI_EASY:
                     // Easy AI doesn't understand red ball danger
