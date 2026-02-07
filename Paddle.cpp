@@ -1,27 +1,45 @@
 #include "Paddle.h"
 #include "SDL3/SDL_opengl.h"
 
-Paddle::Paddle(float x_, float y_, int w, int h, float speed_, SDL_Scancode up, SDL_Scancode down)
-    : x(x_), y(y_), width(w), height(h), speed(speed_), upKey(up), downKey(down) {
+Paddle::Paddle(float x_, float y_, int w, int h, float speed_,
+               SDL_Scancode up, SDL_Scancode down,
+               SDL_Scancode left, SDL_Scancode right)
+    : x(x_), y(y_), width(w), height(h), speed(speed_),
+      upKey(up), downKey(down), leftKey(left), rightKey(right) {
     colorR = 0.95f;
     colorG = 0.95f;
     colorB = 1.0f;
 }
 
-void Paddle::handleInput(const bool* keyState) {
+void Paddle::handleInput(const bool* keyState, bool freeMove) {
     vy = 0.0f;
+    vx = 0.0f;
     if (keyState[upKey])   vy -= speed;
     if (keyState[downKey]) vy += speed;
+    if (freeMove) {
+        if (keyState[leftKey])  vx -= speed;
+        if (keyState[rightKey]) vx += speed;
+    }
 }
 
 void Paddle::setVerticalSpeed(float v) {
     vy = v;
 }
 
-void Paddle::move(double dt, int screenH) {
+void Paddle::setHorizontalSpeed(float v) {
+    vx = v;
+}
+
+void Paddle::move(double dt, int screenH, bool freeMove, float xMin, float xMax) {
     y += vy * (float)dt;
     if (y < 0.0f) y = 0.0f;
     if (y > (float)(screenH - height)) y = (float)(screenH - height);
+
+    if (freeMove) {
+        x += vx * (float)dt;
+        if (x < xMin) x = xMin;
+        if (x > xMax) x = xMax;
+    }
 }
 
 void Paddle::render() const {

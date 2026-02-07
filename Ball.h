@@ -12,7 +12,8 @@ public:
                 const Paddle& p1, const Paddle& p2,
                 int& score1, int& score2,
                 int& health1, int& health2,
-                float& boost1, float& boost2);
+                float& boost1, float& boost2,
+                bool battleMode);
     void render() const;
 
 public:

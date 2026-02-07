@@ -16,6 +16,7 @@ private:
     void update(double dt);
     void render();
     void resetProjection();
+    int menuHitTest(float my) const;
 
 private:
     struct LoseShard {
@@ -59,9 +60,27 @@ private:
         float b;
     };
 
+    struct BoostParticle {
+        float x, y;
+        float vx, vy;
+        float life;
+        float maxLife;
+        float size;
+        float r, g, b;
+        bool active;
+    };
+
+    static const int MaxBoostParticles = 48;
     static const int MaxLoseShards = 96;
     static const int MaxLoseWisps = 64;
     static const int MaxOrbitBalls = 10;
+
+    BoostParticle boostParticles1[MaxBoostParticles];
+    BoostParticle boostParticles2[MaxBoostParticles];
+    int boostParticleCount1 = 0;
+    int boostParticleCount2 = 0;
+    float boostEmitTimer1 = 0.0f;
+    float boostEmitTimer2 = 0.0f;
 
     LoseShard loseShards[MaxLoseShards];
     LoseWisp loseWisps[MaxLoseWisps];
@@ -82,11 +101,23 @@ private:
     int width, height;
     bool isRunning = false;
     bool inStartScreen = true;
-    bool inMainMenu = false;
     bool paused = false;
+
+    enum MenuScreen { MENU_NONE = 0, MENU_MAIN, MENU_PLAY, MENU_SETTINGS, MENU_PAUSE };
+    MenuScreen currentMenu = MENU_NONE;
+    bool hasActiveGame = false;
+    double menuAnimTimer = 0.0;
+    float mouseX = 0.0f;
+    float mouseY = 0.0f;
+    bool p1UseMouse = false;
+    bool p2UseMouse = false;
     bool singlePlayer = false;
     bool endlessMode = false;
     bool fxEnabled = true;
+    bool freeMovement = false;
+
+    enum GameMode { MODE_CLASSIC = 0, MODE_BATTLE = 1 };
+    GameMode gameMode = MODE_CLASSIC;
 
     enum AIDifficulty { AI_EASY = 0, AI_MEDIUM = 1, AI_HARD = 2 };
     AIDifficulty aiDifficulty = AI_MEDIUM;
@@ -97,7 +128,7 @@ private:
     double labelTimer = 0.0;
     double scoreFlashTimer = 0.0;
     double ballExplosionTimer = 0.0;
-    int pauseSelection = 0;
+    int menuSelection = 0;
     int pendingMode = -1;
     int colorMenuPlayer = 0;
     int colorSelection = 0;
@@ -124,9 +155,11 @@ private:
     int lastScore1 = 0;
     int lastScore2 = 0;
 
-    int health1 = 5;
-    int health2 = 5;
-    static const int MaxHealth = 5;
+    int health1 = 10;
+    int health2 = 10;
+    int maxHealth = 10;
+    static const int MaxHealthOptions[4];
+    int maxHealthIndex = 1; // index into MaxHealthOptions (0=5, 1=10, 2=15, 3=20)
     bool koWin = false;
 
     float boostMeter1 = 0.0f;

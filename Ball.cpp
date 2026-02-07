@@ -38,7 +38,8 @@ void Ball::update(double dt, int screenW, int screenH,
                   const Paddle& p1, const Paddle& p2,
                   int& score1, int& score2,
                   int& health1, int& health2,
-                  float& boost1, float& boost2) {
+                  float& boost1, float& boost2,
+                  bool battleMode) {
     x += velX * (float)dt;
     y += velY * (float)dt;
 
@@ -76,16 +77,20 @@ void Ball::update(double dt, int screenW, int screenH,
         rallyEnergy += 0.15f;
         if (rallyEnergy > 1.0f) rallyEnergy = 1.0f;
         topImpactTimer = 0.12f;
-        isPiercing = true;
-        wallBounceCount++;
+        if (battleMode) {
+            isPiercing = true;
+            wallBounceCount++;
+        }
     } else if (y + radius >= (float)screenH) {
         y = (float)screenH - radius;
         velY = -velY;
         rallyEnergy += 0.15f;
         if (rallyEnergy > 1.0f) rallyEnergy = 1.0f;
         bottomImpactTimer = 0.12f;
-        isPiercing = true;
-        wallBounceCount++;
+        if (battleMode) {
+            isPiercing = true;
+            wallBounceCount++;
+        }
     }
 
     // Scoring: left/right bounds
@@ -128,8 +133,8 @@ void Ball::update(double dt, int screenW, int screenH,
         if (rallyEnergy > 1.0f) rallyEnergy = 1.0f;
         leftImpactTimer = 0.12f;
 
-        // Deal damage if ball was piercing (red ricochet)
-        if (isPiercing && health1 > 0) {
+        // Deal damage if ball was piercing (red ricochet) - Battle Mode only
+        if (battleMode && isPiercing && health1 > 0) {
             health1--;
         }
         isPiercing = false;
@@ -169,8 +174,8 @@ void Ball::update(double dt, int screenW, int screenH,
         if (rallyEnergy > 1.0f) rallyEnergy = 1.0f;
         rightImpactTimer = 0.12f;
 
-        // Deal damage if ball was piercing (red ricochet)
-        if (isPiercing && health2 > 0) {
+        // Deal damage if ball was piercing (red ricochet) - Battle Mode only
+        if (battleMode && isPiercing && health2 > 0) {
             health2--;
         }
         isPiercing = false;

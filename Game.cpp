@@ -8,6 +8,8 @@
 #include <cmath>
 #include <cstdlib>
 
+const int Game::MaxHealthOptions[4] = { 5, 10, 15, 20 };
+
 static void drawChar(float x, float y, float scale, char c) {
     float s = scale;
     auto segment = [x, y, s](float x1, float y1, float x2, float y2) {
@@ -377,8 +379,10 @@ bool Game::init() {
     const int paddleH = 120;
     const float paddleSpeed = 600.0f;
 
-    paddle1 = new Paddle(40.0f, (height - paddleH) * 0.5f, paddleW, paddleH, paddleSpeed, SDL_SCANCODE_W, SDL_SCANCODE_S);
-    paddle2 = new Paddle(width - 40.0f - paddleW, (height - paddleH) * 0.5f, paddleW, paddleH, paddleSpeed, SDL_SCANCODE_UP, SDL_SCANCODE_DOWN);
+    paddle1 = new Paddle(40.0f, (height - paddleH) * 0.5f, paddleW, paddleH, paddleSpeed,
+                         SDL_SCANCODE_W, SDL_SCANCODE_S, SDL_SCANCODE_A, SDL_SCANCODE_D);
+    paddle2 = new Paddle(width - 40.0f - paddleW, (height - paddleH) * 0.5f, paddleW, paddleH, paddleSpeed,
+                         SDL_SCANCODE_UP, SDL_SCANCODE_DOWN, SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT);
 
     applyPresetToPaddle(paddle1, p1ColorIndex);
     applyPresetToPaddle(paddle2, p2ColorIndex);
@@ -400,6 +404,41 @@ void Game::resetProjection() {
     glLoadIdentity();
 }
 
+int Game::menuHitTest(float my) const {
+    float startY = 0.0f, spacing = 0.0f;
+    int count = 0;
+
+    if (inColorMenu) {
+        float hs = 24.0f;
+        float cy = (float)height * 0.5f - hs * 0.5f - 60.0f;
+        startY = cy + hs * 1.8f;
+        spacing = 18.0f * 1.4f;
+        count = 5;
+    } else if (currentMenu == MENU_MAIN || currentMenu == MENU_PLAY || currentMenu == MENU_SETTINGS) {
+        float hs = (currentMenu == MENU_MAIN) ? 32.0f : 24.0f;
+        float hy = (float)height * 0.25f;
+        float sepY = hy + hs * 1.3f;
+        startY = sepY + 20.0f;
+        spacing = 18.0f * 1.6f;
+        if (currentMenu == MENU_MAIN) count = hasActiveGame ? 4 : 3;
+        else if (currentMenu == MENU_PLAY) count = 5;
+        else if (currentMenu == MENU_SETTINGS) count = 10;
+    } else if (currentMenu == MENU_PAUSE) {
+        float hs = 28.0f;
+        float hy = (float)height * 0.3f;
+        float sepY = hy + hs * 1.3f;
+        startY = sepY + 24.0f;
+        spacing = 20.0f * 1.8f;
+        count = 3;
+    } else {
+        return -1;
+    }
+
+    if (my < startY || count == 0) return -1;
+    int idx = (int)((my - startY) / spacing);
+    return (idx >= 0 && idx < count) ? idx : -1;
+}
+
 void Game::handleEvents() {
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
@@ -416,10 +455,10 @@ void Game::handleEvents() {
             if (inStartScreen) {
                 if (sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_KP_ENTER) {
                     inStartScreen = false;
-                    inMainMenu = true;
+                    currentMenu = MENU_MAIN;
                     paused = true;
-                    // Default to first competitive mode in the main menu
-                    pauseSelection = 0;
+                    menuSelection = 0;
+                    menuAnimTimer = 0.0;
                     labelTimer = 0.0;
                 } else if (sc == SDL_SCANCODE_ESCAPE) {
                     isRunning = false;
@@ -430,32 +469,50 @@ void Game::handleEvents() {
                         inWinLoseScreen = false;
                         winLoseShowPrompt = false;
                         winLoseTimer = 0.0;
+                        // Transition to main menu after win/lose
+                        currentMenu = MENU_MAIN;
+                        gameOver = false;
+                        menuSelection = 0;
+                        menuAnimTimer = 0.0;
                     }
                     return;
                 }
 
-                // Global ESC: open/close pause menu, or quit from the main menu
+                // ESC: navigate back through menu hierarchy
                 if (sc == SDL_SCANCODE_ESCAPE) {
                     if (inColorMenu) {
                         inColorMenu = false;
                         pendingMode = -1;
                         colorMenuPlayer = 0;
                         colorSelection = 0;
-                    } else if (inMainMenu) {
-                        // From the opening main menu, ESC quits the game
+                    } else if (currentMenu == MENU_MAIN) {
                         isRunning = false;
+                    } else if (currentMenu == MENU_PLAY) {
+                        currentMenu = MENU_MAIN;
+                        menuSelection = 0;
+                        menuAnimTimer = 0.0;
+                    } else if (currentMenu == MENU_SETTINGS) {
+                        // Return to where we came from
+                        currentMenu = hasActiveGame && !gameOver ? MENU_PAUSE : MENU_MAIN;
+                        menuSelection = 0;
+                        menuAnimTimer = 0.0;
+                    } else if (currentMenu == MENU_PAUSE) {
+                        // Resume game
+                        paused = false;
+                        currentMenu = MENU_NONE;
                     } else if (gameOver) {
-                        // From a completed match, ESC returns to the opening main menu
-                        inMainMenu = true;
+                        currentMenu = MENU_MAIN;
                         paused = true;
                         gameOver = false;
-                        pauseSelection = 0;
+                        menuSelection = 0;
+                        menuAnimTimer = 0.0;
                         labelTimer = 0.0;
                     } else {
-                        paused = !paused;
-                        if (paused) {
-                            pauseSelection = 0; // RESUME when pausing in-game
-                        }
+                        // In gameplay: open pause menu
+                        paused = true;
+                        currentMenu = MENU_PAUSE;
+                        menuSelection = 0;
+                        menuAnimTimer = 0.0;
                         labelTimer = 0.0;
                     }
                 } else {
@@ -494,24 +551,6 @@ void Game::handleEvents() {
                                         p2ColorIndex = colorSelection;
                                     }
 
-                                    if (pendingMode == 0) {
-                                        singlePlayer = true;
-                                        endlessMode = false;
-                                        targetScore = 15;
-                                    } else if (pendingMode == 1) {
-                                        singlePlayer = true;
-                                        endlessMode = false;
-                                        targetScore = 30;
-                                    } else if (pendingMode == 2) {
-                                        singlePlayer = false;
-                                        endlessMode = false;
-                                        targetScore = 15;
-                                    } else if (pendingMode == 3) {
-                                        singlePlayer = true;
-                                        endlessMode = true;
-                                        targetScore = 0;
-                                    }
-
                                     if (p1RandomColor) {
                                         applyRandomVividColor(paddle1);
                                     } else {
@@ -527,11 +566,16 @@ void Game::handleEvents() {
                                     gameOver = false;
                                     koWin = false;
                                     score1 = score2 = 0;
-                                    health1 = health2 = MaxHealth;
+                                    health1 = health2 = maxHealth;
                                     boostMeter1 = boostMeter2 = 0.0f;
                                     boostActive1 = boostActive2 = false;
+                                    paddle1->x = 40.0f;
+                                    paddle1->y = (float)(height - paddle1->height) * 0.5f;
+                                    paddle2->x = (float)width - 40.0f - (float)paddle2->width;
+                                    paddle2->y = (float)(height - paddle2->height) * 0.5f;
                                     paused = false;
-                                    inMainMenu = false;
+                                    currentMenu = MENU_NONE;
+                                    hasActiveGame = true;
                                     inColorMenu = false;
                                     pendingMode = -1;
                                     colorMenuPlayer = 0;
@@ -539,54 +583,81 @@ void Game::handleEvents() {
                                     labelTimer = 0.0;
                                 }
                             }
-                        } else {
-                            // Pause/main menu navigation
-                            const int menuItems = inMainMenu ? 5 : 10;
+                        } else if (currentMenu == MENU_MAIN) {
+                            // MAIN MENU: PLAY, [CONTINUE], SETTINGS, QUIT
+                            int itemCount = hasActiveGame ? 4 : 3;
                             if (sc == SDL_SCANCODE_UP) {
-                                pauseSelection = (pauseSelection - 1 + menuItems) % menuItems;
+                                menuSelection = (menuSelection - 1 + itemCount) % itemCount;
                             } else if (sc == SDL_SCANCODE_DOWN) {
-                                pauseSelection = (pauseSelection + 1) % menuItems;
+                                menuSelection = (menuSelection + 1) % itemCount;
                             } else if (sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_KP_ENTER) {
-                                if (inMainMenu) {
-                                    if (pauseSelection == 0) {
-                                        pendingMode = 0;
-                                    } else if (pauseSelection == 1) {
-                                        pendingMode = 1;
-                                    } else if (pauseSelection == 2) {
-                                        pendingMode = 2;
-                                    } else if (pauseSelection == 3) {
-                                        pendingMode = 3;
-                                    } else if (pauseSelection == 4) {
+                                if (hasActiveGame) {
+                                    // 0=PLAY, 1=CONTINUE, 2=SETTINGS, 3=QUIT
+                                    if (menuSelection == 0) {
+                                        currentMenu = MENU_PLAY;
+                                        menuSelection = 0;
+                                        menuAnimTimer = 0.0;
+                                    } else if (menuSelection == 1) {
+                                        // Continue existing game
+                                        paused = false;
+                                        currentMenu = MENU_NONE;
+                                    } else if (menuSelection == 2) {
+                                        currentMenu = MENU_SETTINGS;
+                                        menuSelection = 0;
+                                        menuAnimTimer = 0.0;
+                                    } else if (menuSelection == 3) {
                                         isRunning = false;
                                     }
                                 } else {
-                                    if (pauseSelection == 0) {
-                                        paused = false;
-                                    } else if (pauseSelection == 1) {
-                                        pendingMode = 0;
-                                    } else if (pauseSelection == 2) {
-                                        pendingMode = 1;
-                                    } else if (pauseSelection == 3) {
-                                        pendingMode = 2;
-                                    } else if (pauseSelection == 4) {
-                                        pendingMode = 3;
-                                    } else if (pauseSelection == 5) {
-                                        fxEnabled = !fxEnabled;
-                                    } else if (pauseSelection == 6) {
-                                        // Cycle AI difficulty
-                                        aiDifficulty = (AIDifficulty)((aiDifficulty + 1) % 3);
-                                    } else if (pauseSelection == 7) {
-                                        // Toggle auto-boost
-                                        autoBoostEnabled = !autoBoostEnabled;
-                                    } else if (pauseSelection == 8) {
-                                        // Toggle player side (left/right)
-                                        playerSide = (playerSide == 1) ? 2 : 1;
-                                    } else if (pauseSelection == 9) {
+                                    // 0=PLAY, 1=SETTINGS, 2=QUIT
+                                    if (menuSelection == 0) {
+                                        currentMenu = MENU_PLAY;
+                                        menuSelection = 0;
+                                        menuAnimTimer = 0.0;
+                                    } else if (menuSelection == 1) {
+                                        currentMenu = MENU_SETTINGS;
+                                        menuSelection = 0;
+                                        menuAnimTimer = 0.0;
+                                    } else if (menuSelection == 2) {
                                         isRunning = false;
                                     }
                                 }
-
-                                if (pendingMode >= 0 && paused) {
+                                labelTimer = 0.0;
+                            }
+                        } else if (currentMenu == MENU_PLAY) {
+                            // PLAY: CLASSIC VS AI, CLASSIC PVP, BATTLE VS AI, BATTLE PVP, BACK
+                            const int itemCount = 5;
+                            if (sc == SDL_SCANCODE_UP) {
+                                menuSelection = (menuSelection - 1 + itemCount) % itemCount;
+                            } else if (sc == SDL_SCANCODE_DOWN) {
+                                menuSelection = (menuSelection + 1) % itemCount;
+                            } else if (sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_KP_ENTER) {
+                                if (menuSelection == 4) {
+                                    // BACK
+                                    currentMenu = MENU_MAIN;
+                                    menuSelection = 0;
+                                    menuAnimTimer = 0.0;
+                                } else {
+                                    // 0=CLASSIC AI, 1=CLASSIC PVP, 2=BATTLE AI, 3=BATTLE PVP
+                                    if (menuSelection == 0) {
+                                        gameMode = MODE_CLASSIC;
+                                        singlePlayer = true;
+                                    } else if (menuSelection == 1) {
+                                        gameMode = MODE_CLASSIC;
+                                        singlePlayer = false;
+                                    } else if (menuSelection == 2) {
+                                        gameMode = MODE_BATTLE;
+                                        singlePlayer = true;
+                                    } else if (menuSelection == 3) {
+                                        gameMode = MODE_BATTLE;
+                                        singlePlayer = false;
+                                    }
+                                    // Apply current score target settings
+                                    if (endlessMode) {
+                                        targetScore = 0;
+                                    }
+                                    // Go to color selection
+                                    pendingMode = menuSelection;
                                     inColorMenu = true;
                                     colorMenuPlayer = 0;
                                     if (p1RandomColor) {
@@ -597,19 +668,147 @@ void Game::handleEvents() {
                                         colorSelection = p1ColorIndex;
                                     }
                                 }
-
+                                labelTimer = 0.0;
+                            }
+                        } else if (currentMenu == MENU_SETTINGS) {
+                            // SETTINGS: SCORE, AI, SIDE, MOVEMENT, BOOST, HP, VISUAL FX, P1 INPUT, P2 INPUT, BACK
+                            const int itemCount = 10;
+                            if (sc == SDL_SCANCODE_UP) {
+                                menuSelection = (menuSelection - 1 + itemCount) % itemCount;
+                            } else if (sc == SDL_SCANCODE_DOWN) {
+                                menuSelection = (menuSelection + 1) % itemCount;
+                            } else if (sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_KP_ENTER) {
+                                if (menuSelection == 0) {
+                                    // Cycle score target: 15 → 30 → Endless → 15
+                                    if (!endlessMode && targetScore == 15) {
+                                        targetScore = 30;
+                                    } else if (!endlessMode && targetScore == 30) {
+                                        endlessMode = true;
+                                        targetScore = 0;
+                                    } else {
+                                        endlessMode = false;
+                                        targetScore = 15;
+                                    }
+                                } else if (menuSelection == 1) {
+                                    aiDifficulty = (AIDifficulty)((aiDifficulty + 1) % 3);
+                                } else if (menuSelection == 2) {
+                                    playerSide = (playerSide == 1) ? 2 : 1;
+                                } else if (menuSelection == 3) {
+                                    freeMovement = !freeMovement;
+                                    if (!freeMovement) {
+                                        paddle1->x = 40.0f;
+                                        paddle2->x = (float)width - 40.0f - (float)paddle2->width;
+                                    }
+                                } else if (menuSelection == 4) {
+                                    autoBoostEnabled = !autoBoostEnabled;
+                                } else if (menuSelection == 5) {
+                                    maxHealthIndex = (maxHealthIndex + 1) % 4;
+                                    maxHealth = MaxHealthOptions[maxHealthIndex];
+                                } else if (menuSelection == 6) {
+                                    fxEnabled = !fxEnabled;
+                                } else if (menuSelection == 7) {
+                                    // Toggle P1 input (mutual exclusion with P2)
+                                    p1UseMouse = !p1UseMouse;
+                                    if (p1UseMouse) p2UseMouse = false;
+                                } else if (menuSelection == 8) {
+                                    // Toggle P2 input (mutual exclusion with P1)
+                                    p2UseMouse = !p2UseMouse;
+                                    if (p2UseMouse) p1UseMouse = false;
+                                } else if (menuSelection == 9) {
+                                    // BACK
+                                    currentMenu = hasActiveGame && !gameOver ? MENU_PAUSE : MENU_MAIN;
+                                    menuSelection = 0;
+                                    menuAnimTimer = 0.0;
+                                }
+                                labelTimer = 0.0;
+                            }
+                        } else if (currentMenu == MENU_PAUSE) {
+                            // PAUSE: RESUME, SETTINGS, MAIN MENU
+                            const int itemCount = 3;
+                            if (sc == SDL_SCANCODE_UP) {
+                                menuSelection = (menuSelection - 1 + itemCount) % itemCount;
+                            } else if (sc == SDL_SCANCODE_DOWN) {
+                                menuSelection = (menuSelection + 1) % itemCount;
+                            } else if (sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_KP_ENTER) {
+                                if (menuSelection == 0) {
+                                    // Resume
+                                    paused = false;
+                                    currentMenu = MENU_NONE;
+                                } else if (menuSelection == 1) {
+                                    // Settings
+                                    currentMenu = MENU_SETTINGS;
+                                    menuSelection = 0;
+                                    menuAnimTimer = 0.0;
+                                } else if (menuSelection == 2) {
+                                    // Main Menu
+                                    currentMenu = MENU_MAIN;
+                                    gameOver = false;
+                                    menuSelection = 0;
+                                    menuAnimTimer = 0.0;
+                                }
                                 labelTimer = 0.0;
                             }
                         }
                     } else {
                         if (sc == SDL_SCANCODE_P) {
-                            paused = !paused;
-                            if (paused) {
-                                pauseSelection = 0;
-                            }
+                            paused = true;
+                            currentMenu = MENU_PAUSE;
+                            menuSelection = 0;
+                            menuAnimTimer = 0.0;
                             labelTimer = 0.0;
                         }
                     }
+                }
+            }
+        } else if (e.type == SDL_EVENT_MOUSE_MOTION) {
+            mouseX = e.motion.x;
+            mouseY = e.motion.y;
+            // Update menu hover from mouse position
+            if (paused && !inStartScreen && !inWinLoseScreen) {
+                bool inXRange = (mouseX > (float)width * 0.1f && mouseX < (float)width * 0.9f);
+                if (inXRange) {
+                    int hover = menuHitTest(mouseY);
+                    if (hover >= 0) {
+                        if (inColorMenu) {
+                            colorSelection = hover;
+                        } else {
+                            menuSelection = hover;
+                        }
+                    }
+                }
+            }
+        } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+            mouseX = e.button.x;
+            mouseY = e.button.y;
+            if (inStartScreen) {
+                inStartScreen = false;
+                currentMenu = MENU_MAIN;
+                paused = true;
+                menuSelection = 0;
+                menuAnimTimer = 0.0;
+                labelTimer = 0.0;
+            } else if (inWinLoseScreen) {
+                inWinLoseScreen = false;
+                winLoseShowPrompt = false;
+                winLoseTimer = 0.0;
+                currentMenu = MENU_MAIN;
+                gameOver = false;
+                menuSelection = 0;
+                menuAnimTimer = 0.0;
+            } else if (paused) {
+                bool inXRange = (mouseX > (float)width * 0.1f && mouseX < (float)width * 0.9f);
+                int hover = inXRange ? menuHitTest(mouseY) : -1;
+                if (hover >= 0) {
+                    if (inColorMenu) {
+                        colorSelection = hover;
+                    } else {
+                        menuSelection = hover;
+                    }
+                    // Simulate Enter keypress to trigger the selection action
+                    SDL_Event synth = {};
+                    synth.type = SDL_EVENT_KEY_DOWN;
+                    synth.key.scancode = SDL_SCANCODE_RETURN;
+                    SDL_PushEvent(&synth);
                 }
             }
         }
@@ -617,6 +816,8 @@ void Game::handleEvents() {
 }
 
 void Game::update(double dt) {
+    menuAnimTimer += dt;
+
     if (ballExplosionTimer > 0.0) {
         ballExplosionTimer -= dt;
         if (ballExplosionTimer < 0.0) ballExplosionTimer = 0.0;
@@ -727,12 +928,51 @@ void Game::update(double dt) {
         Paddle* playerPaddle = (playerSide == 1) ? paddle1 : paddle2;
         Paddle* aiPaddle = (playerSide == 1) ? paddle2 : paddle1;
         
-        // Player input
-        playerPaddle->handleInput(keys);
+        // Player input (keyboard or mouse)
+        if (p1UseMouse) {
+            float targetY = mouseY - playerPaddle->height * 0.5f;
+            if (targetY < 0.0f) targetY = 0.0f;
+            if (targetY > (float)(height - playerPaddle->height)) targetY = (float)(height - playerPaddle->height);
+            playerPaddle->y = targetY;
+            playerPaddle->setVerticalSpeed(0.0f);
+            if (freeMovement) {
+                float pMinX = (playerSide == 1) ? 0.0f : (float)width * 0.55f;
+                float pMaxX = (playerSide == 1) ? ((float)width * 0.45f - (float)playerPaddle->width) : ((float)width - (float)playerPaddle->width);
+                float targetX = mouseX - playerPaddle->width * 0.5f;
+                if (targetX < pMinX) targetX = pMinX;
+                if (targetX > pMaxX) targetX = pMaxX;
+                playerPaddle->x = targetX;
+                playerPaddle->setHorizontalSpeed(0.0f);
+            }
+        } else {
+            playerPaddle->handleInput(keys, freeMovement);
+        }
         
         // AI control
         float paddleCenterY = aiPaddle->y + aiPaddle->height * 0.5f;
+        int aiHealth = (playerSide == 1) ? health2 : health1;
         
+        // Difficulty-based AI parameters
+        float speedMult, reactionMult, predictionBlend;
+        switch (aiDifficulty) {
+            case AI_EASY:
+                speedMult = 0.55f;
+                reactionMult = 2.0f;
+                predictionBlend = 0.4f;
+                break;
+            case AI_MEDIUM:
+                speedMult = 0.75f;
+                reactionMult = 3.5f;
+                predictionBlend = 0.75f;
+                break;
+            case AI_HARD:
+            default:
+                speedMult = 0.95f;
+                reactionMult = 5.0f;
+                predictionBlend = 1.0f;
+                break;
+        }
+
         // Predictive AI: calculate where ball will be when it reaches AI paddle
         float targetY = ball->y;
         bool ballMovingTowardAI = (playerSide == 1) ? (ball->velX > 0) : (ball->velX < 0);
@@ -746,29 +986,56 @@ void Game::update(double dt) {
                     if (predictedY < 0) predictedY = -predictedY;
                     else if (predictedY > screenH) predictedY = 2 * screenH - predictedY;
                 }
-                targetY = predictedY;
+                // Blend between current ball Y and predicted Y based on difficulty
+                targetY = ball->y * (1.0f - predictionBlend) + predictedY * predictionBlend;
+            }
+        } else {
+            // Ball moving away: drift toward ready position (screen center)
+            float readyY = (float)height * 0.5f;
+            float driftBlend = 0.0f;
+            switch (aiDifficulty) {
+                case AI_EASY:   driftBlend = 0.15f; break;
+                case AI_MEDIUM: driftBlend = 0.35f; break;
+                case AI_HARD:   driftBlend = 0.55f; break;
+            }
+            targetY = ball->y * (1.0f - driftBlend) + readyY * driftBlend;
+        }
+
+        // Red ball avoidance in Battle Mode
+        bool shouldDodge = false;
+        if (gameMode == MODE_BATTLE && ball->isPiercing && ballMovingTowardAI) {
+            switch (aiDifficulty) {
+                case AI_EASY:
+                    // Easy AI doesn't understand red ball danger
+                    shouldDodge = false;
+                    break;
+                case AI_MEDIUM:
+                    // Medium AI dodges when health critical or many wall bounces
+                    shouldDodge = (aiHealth <= 2) || (ball->wallBounceCount >= 3);
+                    break;
+                case AI_HARD:
+                    // Hard AI always dodges red balls
+                    shouldDodge = true;
+                    break;
             }
         }
-        
-        float diff = targetY - paddleCenterY;
 
-        // Difficulty-based AI parameters
-        float speedMult, reactionMult;
-        switch (aiDifficulty) {
-            case AI_EASY:
-                speedMult = 0.55f;
-                reactionMult = 2.0f;
-                break;
-            case AI_MEDIUM:
-                speedMult = 0.75f;
-                reactionMult = 3.5f;
-                break;
-            case AI_HARD:
-            default:
-                speedMult = 0.95f;
-                reactionMult = 5.0f;
-                break;
+        if (shouldDodge) {
+            // Move away from predicted ball position
+            float dodgeDist = (float)aiPaddle->height * 1.5f;
+            float screenH = (float)height;
+            // Dodge toward whichever side has more room
+            if (targetY > screenH * 0.5f) {
+                targetY -= dodgeDist;
+            } else {
+                targetY += dodgeDist;
+            }
+            float halfH = (float)aiPaddle->height * 0.5f;
+            if (targetY < halfH) targetY = halfH;
+            if (targetY > screenH - halfH) targetY = screenH - halfH;
         }
+
+        float diff = targetY - paddleCenterY;
 
         float maxSpeed = aiPaddle->speed * speedMult;
         float desiredVy = diff * reactionMult;
@@ -776,19 +1043,156 @@ void Game::update(double dt) {
         if (desiredVy < -maxSpeed) desiredVy = -maxSpeed;
 
         aiPaddle->setVerticalSpeed(desiredVy);
+
+        // AI horizontal movement in free movement mode
+        if (freeMovement) {
+            float aiDefaultX = (playerSide == 1)
+                ? (float)(width - 40 - aiPaddle->width)
+                : 40.0f;
+            float advanceTarget = aiDefaultX;
+            if (ballMovingTowardAI && !shouldDodge) {
+                float advanceFraction = 0.0f;
+                switch (aiDifficulty) {
+                    case AI_EASY:   advanceFraction = 0.05f; break;
+                    case AI_MEDIUM: advanceFraction = 0.15f; break;
+                    case AI_HARD:   advanceFraction = 0.25f; break;
+                }
+                // Health-aware: advance less when health is low
+                if (gameMode == MODE_BATTLE && aiHealth <= 3) {
+                    advanceFraction *= 0.3f;
+                }
+                float centerX = (float)width * 0.5f;
+                advanceTarget = aiDefaultX + (centerX - aiDefaultX) * advanceFraction;
+            }
+            float hDiff = advanceTarget - (aiPaddle->x + aiPaddle->width * 0.5f);
+            float hSpeed = hDiff * reactionMult;
+            if (hSpeed > maxSpeed) hSpeed = maxSpeed;
+            if (hSpeed < -maxSpeed) hSpeed = -maxSpeed;
+            aiPaddle->setHorizontalSpeed(hSpeed);
+        } else {
+            aiPaddle->setHorizontalSpeed(0.0f);
+        }
     } else {
-        paddle1->handleInput(keys);
-        paddle2->handleInput(keys);
+        // PvP: each player can independently use keyboard or mouse
+        float p1MinX = 0.0f;
+        float p1MaxX = (float)width * 0.45f - (float)paddle1->width;
+        float p2MinX = (float)width * 0.55f;
+        float p2MaxX = (float)width - (float)paddle2->width;
+
+        if (p1UseMouse) {
+            float targetY = mouseY - paddle1->height * 0.5f;
+            if (targetY < 0.0f) targetY = 0.0f;
+            if (targetY > (float)(height - paddle1->height)) targetY = (float)(height - paddle1->height);
+            paddle1->y = targetY;
+            paddle1->setVerticalSpeed(0.0f);
+            if (freeMovement) {
+                float targetX = mouseX - paddle1->width * 0.5f;
+                if (targetX < p1MinX) targetX = p1MinX;
+                if (targetX > p1MaxX) targetX = p1MaxX;
+                paddle1->x = targetX;
+                paddle1->setHorizontalSpeed(0.0f);
+            }
+        } else {
+            paddle1->handleInput(keys, freeMovement);
+        }
+        if (p2UseMouse) {
+            float targetY = mouseY - paddle2->height * 0.5f;
+            if (targetY < 0.0f) targetY = 0.0f;
+            if (targetY > (float)(height - paddle2->height)) targetY = (float)(height - paddle2->height);
+            paddle2->y = targetY;
+            paddle2->setVerticalSpeed(0.0f);
+            if (freeMovement) {
+                float targetX = mouseX - paddle2->width * 0.5f;
+                if (targetX < p2MinX) targetX = p2MinX;
+                if (targetX > p2MaxX) targetX = p2MaxX;
+                paddle2->x = targetX;
+                paddle2->setHorizontalSpeed(0.0f);
+            }
+        } else {
+            paddle2->handleInput(keys, freeMovement);
+        }
     }
 
-    paddle1->move(dt, height);
-    paddle2->move(dt, height);
+    {
+        float p1MinX = 0.0f;
+        float p1MaxX = (float)width * 0.45f - (float)paddle1->width;
+        float p2MinX = (float)width * 0.55f;
+        float p2MaxX = (float)width - (float)paddle2->width;
+        paddle1->move(dt, height, freeMovement, p1MinX, p1MaxX);
+        paddle2->move(dt, height, freeMovement, p2MinX, p2MaxX);
+    }
     
     // Restore original speeds
     paddle1->speed = originalSpeed1;
     paddle2->speed = originalSpeed2;
 
-    ball->update(dt, width, height, *paddle1, *paddle2, score1, score2, health1, health2, boostMeter1, boostMeter2);
+    // Boost particle update & emission
+    if (fxEnabled) {
+        float fdt = (float)dt;
+        // Update existing particles
+        for (int i = 0; i < boostParticleCount1; ++i) {
+            BoostParticle& p = boostParticles1[i];
+            p.x += p.vx * fdt;
+            p.y += p.vy * fdt;
+            p.life -= fdt;
+            if (p.life <= 0.0f) {
+                boostParticles1[i] = boostParticles1[--boostParticleCount1];
+                --i;
+            }
+        }
+        for (int i = 0; i < boostParticleCount2; ++i) {
+            BoostParticle& p = boostParticles2[i];
+            p.x += p.vx * fdt;
+            p.y += p.vy * fdt;
+            p.life -= fdt;
+            if (p.life <= 0.0f) {
+                boostParticles2[i] = boostParticles2[--boostParticleCount2];
+                --i;
+            }
+        }
+        // Emit new particles when boosting
+        float emitInterval = 0.03f;
+        if (boostActive1) {
+            boostEmitTimer1 += fdt;
+            while (boostEmitTimer1 >= emitInterval && boostParticleCount1 < MaxBoostParticles) {
+                boostEmitTimer1 -= emitInterval;
+                BoostParticle& p = boostParticles1[boostParticleCount1++];
+                float randY = ((std::rand() % 100) / 100.0f);
+                p.x = paddle1->x;
+                p.y = paddle1->y + randY * paddle1->height;
+                p.vx = -40.0f - (std::rand() % 60);
+                p.vy = ((std::rand() % 100) - 50) * 0.6f;
+                p.life = 0.3f + (std::rand() % 30) * 0.01f;
+                p.maxLife = p.life;
+                p.size = 2.0f + (std::rand() % 30) * 0.1f;
+                p.r = 0.3f; p.g = 0.7f; p.b = 1.0f;
+                p.active = true;
+            }
+        } else {
+            boostEmitTimer1 = 0.0f;
+        }
+        if (boostActive2) {
+            boostEmitTimer2 += fdt;
+            while (boostEmitTimer2 >= emitInterval && boostParticleCount2 < MaxBoostParticles) {
+                boostEmitTimer2 -= emitInterval;
+                BoostParticle& p = boostParticles2[boostParticleCount2++];
+                float randY = ((std::rand() % 100) / 100.0f);
+                p.x = paddle2->x + paddle2->width;
+                p.y = paddle2->y + randY * paddle2->height;
+                p.vx = 40.0f + (std::rand() % 60);
+                p.vy = ((std::rand() % 100) - 50) * 0.6f;
+                p.life = 0.3f + (std::rand() % 30) * 0.01f;
+                p.maxLife = p.life;
+                p.size = 2.0f + (std::rand() % 30) * 0.1f;
+                p.r = 0.3f; p.g = 0.7f; p.b = 1.0f;
+                p.active = true;
+            }
+        } else {
+            boostEmitTimer2 = 0.0f;
+        }
+    }
+
+    ball->update(dt, width, height, *paddle1, *paddle2, score1, score2, health1, health2, boostMeter1, boostMeter2, gameMode == MODE_BATTLE);
     // Detect score changes to trigger a brief flash
     if (score1 != lastScore1 || score2 != lastScore2) {
         scoreFlashTimer = 0.3; // seconds
@@ -800,11 +1204,12 @@ void Game::update(double dt) {
         lastScore1 = score1;
         lastScore2 = score2;
     }
-    // Check KO win condition (health depleted)
-    if (health1 <= 0 || health2 <= 0) {
+    // Check KO win condition (health depleted) - Battle Mode only
+    if (gameMode == MODE_BATTLE && (health1 <= 0 || health2 <= 0)) {
         gameOver = true;
         paused = true;
         koWin = true;
+        currentMenu = MENU_NONE;
 
         inWinLoseScreen = true;
         winLoseTimer = 0.0;
@@ -919,6 +1324,7 @@ void Game::update(double dt) {
             koWin = false;
             gameOver = true;
             paused = true;
+            currentMenu = MENU_NONE;
 
             inWinLoseScreen = true;
             winLoseTimer = 0.0;
@@ -1276,15 +1682,102 @@ void Game::render() {
             glPopMatrix();
         }
     } else {
+        // Boost color tint: shift paddle toward cyan when boosting
+        float savedR1 = 0, savedG1 = 0, savedB1 = 0;
+        float savedR2 = 0, savedG2 = 0, savedB2 = 0;
+        if (paddle1 && boostActive1 && fxEnabled) {
+            savedR1 = paddle1->colorR; savedG1 = paddle1->colorG; savedB1 = paddle1->colorB;
+            float pulse = 0.6f + 0.4f * std::sin((float)labelTimer * 10.0f);
+            float blend = 0.4f * pulse;
+            paddle1->colorR = savedR1 * (1.0f - blend) + 0.3f * blend;
+            paddle1->colorG = savedG1 * (1.0f - blend) + 0.85f * blend;
+            paddle1->colorB = savedB1 * (1.0f - blend) + 1.0f * blend;
+        }
+        if (paddle2 && boostActive2 && fxEnabled) {
+            savedR2 = paddle2->colorR; savedG2 = paddle2->colorG; savedB2 = paddle2->colorB;
+            float pulse = 0.6f + 0.4f * std::sin((float)labelTimer * 10.0f);
+            float blend = 0.4f * pulse;
+            paddle2->colorR = savedR2 * (1.0f - blend) + 0.3f * blend;
+            paddle2->colorG = savedG2 * (1.0f - blend) + 0.85f * blend;
+            paddle2->colorB = savedB2 * (1.0f - blend) + 1.0f * blend;
+        }
+
         if (paddle1) paddle1->render();
         if (paddle2) paddle2->render();
         if (ball) ball->render();
+
+        // Restore paddle colors
+        if (paddle1 && boostActive1 && fxEnabled) {
+            paddle1->colorR = savedR1; paddle1->colorG = savedG1; paddle1->colorB = savedB1;
+        }
+        if (paddle2 && boostActive2 && fxEnabled) {
+            paddle2->colorR = savedR2; paddle2->colorG = savedG2; paddle2->colorB = savedB2;
+        }
     }
 
     // Switch to 2D for HUD and menus on top
     glDisable(GL_DEPTH_TEST);
     resetProjection();
     glLoadIdentity();
+
+    // Boost visual effects: paddle glow aura + particles
+    if (fxEnabled) {
+        // Paddle glow aura when boosting
+        auto drawBoostGlow = [&](Paddle* pad, bool active) {
+            if (!pad || !active) return;
+            float pulse = 0.5f + 0.5f * std::sin((float)labelTimer * 8.0f);
+            float glowPad = 12.0f + 4.0f * pulse;
+            float gx0 = pad->x - glowPad;
+            float gy0 = pad->y - glowPad;
+            float gx1 = pad->x + pad->width + glowPad;
+            float gy1 = pad->y + pad->height + glowPad;
+            float cx = pad->x + pad->width * 0.5f;
+            float cy = pad->y + pad->height * 0.5f;
+            float alpha = 0.25f + 0.15f * pulse;
+
+            // Radial glow using triangle fan
+            glBegin(GL_TRIANGLE_FAN);
+            glColor4f(0.3f, 0.8f, 1.0f, alpha);
+            glVertex2f(cx, cy);
+            glColor4f(0.2f, 0.6f, 1.0f, 0.0f);
+            glVertex2f(gx0, gy0);
+            glVertex2f(gx1, gy0);
+            glVertex2f(gx1, gy1);
+            glVertex2f(gx0, gy1);
+            glVertex2f(gx0, gy0);
+            glEnd();
+        };
+        drawBoostGlow(paddle1, boostActive1);
+        drawBoostGlow(paddle2, boostActive2);
+
+        // Boost particles
+        for (int i = 0; i < boostParticleCount1; ++i) {
+            const BoostParticle& p = boostParticles1[i];
+            float t = p.life / p.maxLife;
+            float alpha = t * 0.8f;
+            float sz = p.size * t;
+            glBegin(GL_QUADS);
+            glColor4f(p.r, p.g, p.b, alpha);
+            glVertex2f(p.x - sz, p.y - sz);
+            glVertex2f(p.x + sz, p.y - sz);
+            glVertex2f(p.x + sz, p.y + sz);
+            glVertex2f(p.x - sz, p.y + sz);
+            glEnd();
+        }
+        for (int i = 0; i < boostParticleCount2; ++i) {
+            const BoostParticle& p = boostParticles2[i];
+            float t = p.life / p.maxLife;
+            float alpha = t * 0.8f;
+            float sz = p.size * t;
+            glBegin(GL_QUADS);
+            glColor4f(p.r, p.g, p.b, alpha);
+            glVertex2f(p.x - sz, p.y - sz);
+            glVertex2f(p.x + sz, p.y - sz);
+            glVertex2f(p.x + sz, p.y + sz);
+            glVertex2f(p.x - sz, p.y + sz);
+            glEnd();
+        }
+    }
 
     if (fxEnabled) {
         float centerX = (float)width * 0.5f;
@@ -1499,7 +1992,7 @@ void Game::render() {
     }
 
     if (paused) {
-        float alpha = inMainMenu ? 1.0f : 0.5f;  // opaque for main menu, translucent for pause
+        float alpha = (currentMenu == MENU_MAIN || currentMenu == MENU_PLAY || currentMenu == MENU_SETTINGS) ? 1.0f : 0.5f;
         glColor4f(0.0f, 0.0f, 0.0f, alpha);
         glBegin(GL_QUADS);
         glVertex2f(0.0f, 0.0f);
@@ -1512,7 +2005,7 @@ void Game::render() {
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 
     // Only draw HUD when not in the opening main menu
-    if (!inMainMenu) {
+    if (currentMenu != MENU_MAIN && currentMenu != MENU_PLAY) {
         float topY = 30.0f;
 
         // Control hints
@@ -1550,24 +2043,22 @@ void Game::render() {
         char modeText[64];
 
         if (singlePlayer) {
+            const char* modePrefix = (gameMode == MODE_BATTLE) ? "BATTLE" : "CLASSIC";
             if (endlessMode) {
-                std::snprintf(modeText, sizeof(modeText), "ENDLESS MODE AI");
-            } else if (targetScore == 15) {
-                std::snprintf(modeText, sizeof(modeText), "FIRST TO 15 AI");
-            } else if (targetScore == 30) {
-                std::snprintf(modeText, sizeof(modeText), "FIRST TO 30 AI");
+                std::snprintf(modeText, sizeof(modeText), "%s ENDLESS AI", modePrefix);
             } else if (targetScore > 0) {
-                std::snprintf(modeText, sizeof(modeText), "FIRST TO %d AI", targetScore);
+                std::snprintf(modeText, sizeof(modeText), "%s FIRST TO %d AI", modePrefix, targetScore);
             } else {
-                std::snprintf(modeText, sizeof(modeText), "VS AI");
+                std::snprintf(modeText, sizeof(modeText), "%s VS AI", modePrefix);
             }
         } else {
+            const char* modePrefix = (gameMode == MODE_BATTLE) ? "BATTLE" : "CLASSIC";
             if (targetScore > 0) {
-                std::snprintf(modeText, sizeof(modeText), "FIRST TO %d PVP", targetScore);
+                std::snprintf(modeText, sizeof(modeText), "%s FIRST TO %d PVP", modePrefix, targetScore);
             } else if (endlessMode) {
-                std::snprintf(modeText, sizeof(modeText), "ENDLESS MODE PVP");
+                std::snprintf(modeText, sizeof(modeText), "%s ENDLESS PVP", modePrefix);
             } else {
-                std::snprintf(modeText, sizeof(modeText), "P1 VS P2");
+                std::snprintf(modeText, sizeof(modeText), "%s P1 VS P2", modePrefix);
             }
         }
 
@@ -1581,8 +2072,8 @@ void Game::render() {
         glColor4f(mr, mg, mb, 1.0f);
         drawText(modeX, modeY, modeScale, modeText);
 
-        // Health bars near each paddle
-        if (fxEnabled) {
+        // Health bars near each paddle (Battle Mode only)
+        if (fxEnabled && gameMode == MODE_BATTLE) {
             float barWidth = 80.0f;
             float barHeight = 10.0f;
             float barPadding = 2.0f;
@@ -1601,7 +2092,7 @@ void Game::render() {
             glEnd();
 
             // Health fill with color shift (green to yellow to red)
-            float p1Ratio = (float)health1 / (float)MaxHealth;
+            float p1Ratio = (float)health1 / (float)maxHealth;
             float p1FillWidth = barWidth * p1Ratio;
             float p1Hue = p1Ratio * 0.33f; // 0.33 = green, 0 = red
             float p1r, p1g, p1b;
@@ -1635,7 +2126,7 @@ void Game::render() {
             glEnd();
 
             // Health fill
-            float p2Ratio = (float)health2 / (float)MaxHealth;
+            float p2Ratio = (float)health2 / (float)maxHealth;
             float p2FillWidth = barWidth * p2Ratio;
             float p2Hue = p2Ratio * 0.33f;
             float p2r, p2g, p2b;
@@ -1653,11 +2144,14 @@ void Game::render() {
             glVertex2f(p2BarX + barWidth, p2BarY + barHeight);
             glVertex2f(p2BarX + barWidth - p2FillWidth, p2BarY + barHeight);
             glEnd();
+        }
 
-            // Boost meters (smaller, below health bars)
+        // Boost meters (shown in both Classic and Battle modes)
+        if (fxEnabled) {
             float boostBarWidth = 60.0f;
             float boostBarHeight = 6.0f;
-            float boostYOffset = 18.0f;
+            // Position boost bar relative to paddle center; offset further down if health bars visible
+            float boostYOffset = (gameMode == MODE_BATTLE) ? 18.0f : 8.0f;
 
             // P1 boost bar
             float b1X = paddle1->x + paddle1->width + 15.0f;
@@ -1754,39 +2248,150 @@ void Game::render() {
 
                 drawText(ix, iy, menuScale, items[i]);
             }
-        } else if (inMainMenu) {
-            // Opening main menu: opaque background, no RESUME option
-            const char* headerText = "MAIN MENU";
-            float headerScale = 24.0f;
-            float textWidth = measureText(headerScale, headerText);
-            float x = (float)width * 0.5f - textWidth * 0.5f;
-            float y = (float)height * 0.5f - headerScale * 0.5f - 60.0f;
-            drawText(x, y, headerScale, headerText);
+        } else if (currentMenu == MENU_MAIN || currentMenu == MENU_PLAY || currentMenu == MENU_SETTINGS) {
+            // --- Shared menu rendering helper ---
+            const char* headerText = nullptr;
+            const char* menuItems[11];
+            char dynamicLabels[11][48];
+            int itemCount = 0;
 
-            const char* items[5] = {
-                "FIRST TO 15",
-                "FIRST TO 30",
-                "P1 VS P2",
-                "ENDLESS MODE",
-                "QUIT"
-            };
-
-            float menuScale = 18.0f;
-            float startY = y + headerScale * 1.8f;
-
-            for (int i = 0; i < 5; ++i) {
-                float w = measureText(menuScale, items[i]);
-                float ix = (float)width * 0.5f - w * 0.5f;
-                float iy = startY + i * (menuScale * 1.4f);
-
-                if (i == pauseSelection) {
-                    glColor4f(1.0f, 1.0f, 0.3f, 1.0f);
+            if (currentMenu == MENU_MAIN) {
+                headerText = "PINGPONG";
+                if (hasActiveGame) {
+                    menuItems[0] = "PLAY";
+                    menuItems[1] = "CONTINUE";
+                    menuItems[2] = "SETTINGS";
+                    menuItems[3] = "QUIT";
+                    itemCount = 4;
                 } else {
-                    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+                    menuItems[0] = "PLAY";
+                    menuItems[1] = "SETTINGS";
+                    menuItems[2] = "QUIT";
+                    itemCount = 3;
+                }
+            } else if (currentMenu == MENU_PLAY) {
+                headerText = "SELECT MODE";
+                menuItems[0] = "CLASSIC VS AI";
+                menuItems[1] = "CLASSIC PVP";
+                menuItems[2] = "BATTLE VS AI";
+                menuItems[3] = "BATTLE PVP";
+                menuItems[4] = "BACK";
+                itemCount = 5;
+            } else if (currentMenu == MENU_SETTINGS) {
+                headerText = "SETTINGS";
+                // Build dynamic labels for toggle items
+                if (endlessMode) {
+                    std::snprintf(dynamicLabels[0], sizeof(dynamicLabels[0]), "SCORE: ENDLESS");
+                } else {
+                    std::snprintf(dynamicLabels[0], sizeof(dynamicLabels[0]), "SCORE: FIRST TO %d", targetScore);
+                }
+                const char* diffNames[] = { "EASY", "MEDIUM", "HARD" };
+                std::snprintf(dynamicLabels[1], sizeof(dynamicLabels[1]), "AI: %s", diffNames[aiDifficulty]);
+                std::snprintf(dynamicLabels[2], sizeof(dynamicLabels[2]), "SIDE: %s", playerSide == 1 ? "LEFT" : "RIGHT");
+                std::snprintf(dynamicLabels[3], sizeof(dynamicLabels[3]), "MOVEMENT: %s", freeMovement ? "FREE" : "FIXED");
+                std::snprintf(dynamicLabels[4], sizeof(dynamicLabels[4]), "BOOST: %s", autoBoostEnabled ? "AUTO" : "MANUAL");
+                std::snprintf(dynamicLabels[5], sizeof(dynamicLabels[5]), "HP: %d", maxHealth);
+                std::snprintf(dynamicLabels[6], sizeof(dynamicLabels[6]), "VISUAL FX: %s", fxEnabled ? "ON" : "OFF");
+                std::snprintf(dynamicLabels[7], sizeof(dynamicLabels[7]), "P1 INPUT: %s", p1UseMouse ? "MOUSE" : "KEYBOARD");
+                std::snprintf(dynamicLabels[8], sizeof(dynamicLabels[8]), "P2 INPUT: %s", p2UseMouse ? "MOUSE" : "KEYBOARD");
+                for (int i = 0; i < 9; ++i) menuItems[i] = dynamicLabels[i];
+                menuItems[9] = "BACK";
+                itemCount = 10;
+            }
+
+            // Header
+            float headerScale = (currentMenu == MENU_MAIN) ? 32.0f : 24.0f;
+            float headerW = measureText(headerScale, headerText);
+            float hx = (float)width * 0.5f - headerW * 0.5f;
+            float hy = (float)height * 0.25f;
+
+            // Header shadow
+            glColor4f(0.0f, 0.0f, 0.0f, 0.6f);
+            drawText(hx + 2.0f, hy + 2.0f, headerScale, headerText);
+
+            // Header color - accent for title, white for submenus
+            if (currentMenu == MENU_MAIN) {
+                glColor4f(0.3f, 0.7f, 1.0f, 1.0f);
+            } else {
+                glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+            }
+            drawText(hx, hy, headerScale, headerText);
+
+            // Separator line under header
+            float sepY = hy + headerScale * 1.3f;
+            float sepW = 200.0f;
+            glBegin(GL_QUADS);
+            glColor4f(0.3f, 0.5f, 0.8f, 0.6f);
+            glVertex2f((float)width * 0.5f - sepW * 0.5f, sepY);
+            glVertex2f((float)width * 0.5f + sepW * 0.5f, sepY);
+            glVertex2f((float)width * 0.5f + sepW * 0.5f, sepY + 2.0f);
+            glVertex2f((float)width * 0.5f - sepW * 0.5f, sepY + 2.0f);
+            glEnd();
+
+            // Menu items with visual hierarchy
+            float menuScale = 18.0f;
+            float itemSpacing = menuScale * 1.6f;
+            float startY = sepY + 20.0f;
+
+            for (int i = 0; i < itemCount; ++i) {
+                const char* label = menuItems[i];
+                float w = measureText(menuScale, label);
+                float ix = (float)width * 0.5f - w * 0.5f;
+                float iy = startY + i * itemSpacing;
+
+                bool isSelected = (i == menuSelection);
+                bool isBack = (currentMenu == MENU_PLAY && i == 4) ||
+                              (currentMenu == MENU_SETTINGS && i == 9);
+                bool isQuit = (currentMenu == MENU_MAIN && i == itemCount - 1);
+
+                if (isSelected) {
+                    // Selection glow background
+                    float glowPulse = 0.6f + 0.4f * std::sin((float)menuAnimTimer * 5.0f);
+                    float bgPad = 8.0f;
+                    glBegin(GL_QUADS);
+                    glColor4f(0.2f, 0.4f, 0.8f, 0.25f * glowPulse);
+                    glVertex2f(ix - bgPad, iy - 2.0f);
+                    glVertex2f(ix + w + bgPad, iy - 2.0f);
+                    glVertex2f(ix + w + bgPad, iy + menuScale + 2.0f);
+                    glVertex2f(ix - bgPad, iy + menuScale + 2.0f);
+                    glEnd();
+
+                    // Selection indicator brackets
+                    float bracketOffset = 12.0f;
+                    glColor4f(0.3f, 0.7f, 1.0f, 1.0f);
+                    drawText(ix - bracketOffset - measureText(menuScale, ">"), iy, menuScale, ">");
+                    drawText(ix + w + bracketOffset, iy, menuScale, "<");
+
+                    // Highlighted text color
+                    if (isQuit) {
+                        glColor4f(1.0f, 0.5f, 0.5f, 1.0f);
+                    } else {
+                        glColor4f(1.0f, 1.0f, 0.3f, 1.0f);
+                    }
+                } else {
+                    if (isBack) {
+                        glColor4f(0.6f, 0.6f, 0.7f, 1.0f);
+                    } else if (isQuit) {
+                        glColor4f(0.7f, 0.4f, 0.4f, 1.0f);
+                    } else if (currentMenu == MENU_MAIN && i == 0) {
+                        // PLAY is visually prominent
+                        glColor4f(0.9f, 0.9f, 1.0f, 1.0f);
+                    } else {
+                        glColor4f(0.8f, 0.8f, 0.85f, 1.0f);
+                    }
                 }
 
-                drawText(ix, iy, menuScale, items[i]);
+                drawText(ix, iy, menuScale, label);
             }
+
+            // Navigation hint at bottom
+            const char* hint = "UP/DOWN: NAVIGATE   ENTER/CLICK: SELECT   ESC: BACK";
+            float hintScale = 10.0f;
+            float hintW = measureText(hintScale, hint);
+            float hintX = (float)width * 0.5f - hintW * 0.5f;
+            float hintY = (float)height - 40.0f;
+            glColor4f(0.5f, 0.5f, 0.6f, 0.7f);
+            drawText(hintX, hintY, hintScale, hint);
         } else {
             if (inWinLoseScreen && gameOver) {
                 float centerX = (float)width * 0.5f;
@@ -2072,77 +2677,60 @@ void Game::render() {
                     glColor4f(pr, pg, pb, blink);
                     drawText(px, py, promptScale, prompt);
                 }
-            } else {
-                // In-game pause / game-over menu: translucent background, includes RESUME
-                const char* pausedText = gameOver ? "GAME OVER" : "PAUSED";
-                float pausedScale = 24.0f;
-                float textWidth = measureText(pausedScale, pausedText);
-                float x = (float)width * 0.5f - textWidth * 0.5f;
-                float y = (float)height * 0.5f - pausedScale * 0.5f - 60.0f;
-                drawText(x, y, pausedScale, pausedText);
+            } else if (currentMenu == MENU_PAUSE) {
+                // In-game pause menu: clean 3-item layout
+                const char* headerText = "PAUSED";
+                float headerScale = 28.0f;
+                float headerW = measureText(headerScale, headerText);
+                float hx = (float)width * 0.5f - headerW * 0.5f;
+                float hy = (float)height * 0.3f;
 
-                if (gameOver) {
-                    // Show winner text when a target score has been reached
-                    const char* winnerText = nullptr;
-                    if (score1 > score2) {
-                        winnerText = "PLAYER 1 WINS";
-                    } else if (score2 > score1) {
-                        winnerText = "PLAYER 2 WINS";
-                    }
-                    if (winnerText) {
-                        float ws = 18.0f;
-                        float ww = measureText(ws, winnerText);
-                        float wx = (float)width * 0.5f - ww * 0.5f;
-                        float wy = y + pausedScale * 1.6f;
-                        drawText(wx, wy, ws, winnerText);
-                    }
-                }
+                glColor4f(0.0f, 0.0f, 0.0f, 0.5f);
+                drawText(hx + 2.0f, hy + 2.0f, headerScale, headerText);
+                glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+                drawText(hx, hy, headerScale, headerText);
 
-                const char* items[10] = {
-                    "RESUME",
-                    "FIRST TO 15",
-                    "FIRST TO 30",
-                    "P1 VS P2",
-                    "ENDLESS MODE",
-                    nullptr,
-                    nullptr,
-                    nullptr,
-                    nullptr,
-                    "QUIT"
-                };
+                // Separator
+                float sepY = hy + headerScale * 1.3f;
+                float sepW = 160.0f;
+                glBegin(GL_QUADS);
+                glColor4f(0.3f, 0.5f, 0.8f, 0.5f);
+                glVertex2f((float)width * 0.5f - sepW * 0.5f, sepY);
+                glVertex2f((float)width * 0.5f + sepW * 0.5f, sepY);
+                glVertex2f((float)width * 0.5f + sepW * 0.5f, sepY + 2.0f);
+                glVertex2f((float)width * 0.5f - sepW * 0.5f, sepY + 2.0f);
+                glEnd();
 
-                float menuScale = 18.0f;
-                float startY = y + pausedScale * (gameOver ? 2.4f : 1.8f);
+                const char* pauseItems[3] = { "RESUME", "SETTINGS", "MAIN MENU" };
+                float menuScale = 20.0f;
+                float itemSpacing = menuScale * 1.8f;
+                float startY = sepY + 24.0f;
 
-                for (int i = 0; i < 10; ++i) {
-                    const char* label = items[i];
-                    char fxLabel[32];
-                    char diffLabel[32];
-                    char boostLabel[32];
-                    char sideLabel[32];
-                    if (i == 5) {
-                        std::snprintf(fxLabel, sizeof(fxLabel), fxEnabled ? "VISUAL FX: ON" : "VISUAL FX: OFF");
-                        label = fxLabel;
-                    } else if (i == 6) {
-                        const char* diffNames[] = { "EASY", "MEDIUM", "HARD" };
-                        std::snprintf(diffLabel, sizeof(diffLabel), "AI: %s", diffNames[aiDifficulty]);
-                        label = diffLabel;
-                    } else if (i == 7) {
-                        std::snprintf(boostLabel, sizeof(boostLabel), autoBoostEnabled ? "BOOST: AUTO" : "BOOST: MANUAL");
-                        label = boostLabel;
-                    } else if (i == 8) {
-                        std::snprintf(sideLabel, sizeof(sideLabel), playerSide == 1 ? "SIDE: LEFT" : "SIDE: RIGHT");
-                        label = sideLabel;
-                    }
-
+                for (int i = 0; i < 3; ++i) {
+                    const char* label = pauseItems[i];
                     float w = measureText(menuScale, label);
                     float ix = (float)width * 0.5f - w * 0.5f;
-                    float iy = startY + i * (menuScale * 1.4f);
+                    float iy = startY + i * itemSpacing;
 
-                    if (i == pauseSelection) {
+                    if (i == menuSelection) {
+                        float glowPulse = 0.6f + 0.4f * std::sin((float)menuAnimTimer * 5.0f);
+                        float bgPad = 8.0f;
+                        glBegin(GL_QUADS);
+                        glColor4f(0.2f, 0.4f, 0.8f, 0.25f * glowPulse);
+                        glVertex2f(ix - bgPad, iy - 2.0f);
+                        glVertex2f(ix + w + bgPad, iy - 2.0f);
+                        glVertex2f(ix + w + bgPad, iy + menuScale + 2.0f);
+                        glVertex2f(ix - bgPad, iy + menuScale + 2.0f);
+                        glEnd();
+
+                        float bracketOffset = 12.0f;
+                        glColor4f(0.3f, 0.7f, 1.0f, 1.0f);
+                        drawText(ix - bracketOffset - measureText(menuScale, ">"), iy, menuScale, ">");
+                        drawText(ix + w + bracketOffset, iy, menuScale, "<");
+
                         glColor4f(1.0f, 1.0f, 0.3f, 1.0f);
                     } else {
-                        glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+                        glColor4f(0.8f, 0.8f, 0.85f, 1.0f);
                     }
 
                     drawText(ix, iy, menuScale, label);
