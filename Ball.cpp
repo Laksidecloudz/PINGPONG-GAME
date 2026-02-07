@@ -39,7 +39,8 @@ void Ball::update(double dt, int screenW, int screenH,
                   int& score1, int& score2,
                   int& health1, int& health2,
                   float& boost1, float& boost2,
-                  bool battleMode) {
+                  bool battleMode,
+                  bool shield1Active, bool shield2Active) {
     x += velX * (float)dt;
     y += velY * (float)dt;
 
@@ -134,8 +135,21 @@ void Ball::update(double dt, int screenW, int screenH,
         leftImpactTimer = 0.12f;
 
         // Deal damage if ball was piercing (red ricochet) - Battle Mode only
-        if (battleMode && isPiercing && health1 > 0) {
-            health1--;
+        // Shield blocks piercing damage and adds speed boost
+        if (battleMode && isPiercing) {
+            if (shield1Active) {
+                // Shield deflect: no damage, speed boost
+                float spd = std::sqrt(velX * velX + velY * velY);
+                if (spd > 0.0f) {
+                    float boosted = spd * 1.3f;
+                    if (boosted > 900.0f) boosted = 900.0f;
+                    float ratio = boosted / spd;
+                    velX *= ratio;
+                    velY *= ratio;
+                }
+            } else if (health1 > 0) {
+                health1--;
+            }
         }
         isPiercing = false;
         wallBounceCount = 0;
@@ -175,8 +189,21 @@ void Ball::update(double dt, int screenW, int screenH,
         rightImpactTimer = 0.12f;
 
         // Deal damage if ball was piercing (red ricochet) - Battle Mode only
-        if (battleMode && isPiercing && health2 > 0) {
-            health2--;
+        // Shield blocks piercing damage and adds speed boost
+        if (battleMode && isPiercing) {
+            if (shield2Active) {
+                // Shield deflect: no damage, speed boost
+                float spd = std::sqrt(velX * velX + velY * velY);
+                if (spd > 0.0f) {
+                    float boosted = spd * 1.3f;
+                    if (boosted > 900.0f) boosted = 900.0f;
+                    float ratio = boosted / spd;
+                    velX *= ratio;
+                    velY *= ratio;
+                }
+            } else if (health2 > 0) {
+                health2--;
+            }
         }
         isPiercing = false;
         wallBounceCount = 0;

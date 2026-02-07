@@ -13,7 +13,8 @@ public:
                 int& score1, int& score2,
                 int& health1, int& health2,
                 float& boost1, float& boost2,
-                bool battleMode);
+                bool battleMode,
+                bool shield1Active = false, bool shield2Active = false);
     void render() const;
 
 public:

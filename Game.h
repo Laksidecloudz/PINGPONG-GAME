@@ -171,6 +171,15 @@ private:
     static constexpr float BoostDrainRate = 0.8f;
     static constexpr float BoostFillAmount = 0.25f;
 
+    bool shieldEnabled = true;
+    float shieldTimer1 = 0.0f;
+    float shieldTimer2 = 0.0f;
+    float shieldCooldown1 = 0.0f;
+    float shieldCooldown2 = 0.0f;
+    static constexpr float ShieldDuration = 0.5f;
+    static constexpr float ShieldCooldown = 4.0f;
+    static constexpr float ShieldSpeedBoost = 1.3f;
+
     float ballExplosionX = 0.0f;
     float ballExplosionY = 0.0f;
 

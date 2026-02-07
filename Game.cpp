@@ -422,7 +422,7 @@ int Game::menuHitTest(float my) const {
         spacing = 18.0f * 1.6f;
         if (currentMenu == MENU_MAIN) count = hasActiveGame ? 4 : 3;
         else if (currentMenu == MENU_PLAY) count = 5;
-        else if (currentMenu == MENU_SETTINGS) count = 10;
+        else if (currentMenu == MENU_SETTINGS) count = 11;
     } else if (currentMenu == MENU_PAUSE) {
         float hs = 28.0f;
         float hy = (float)height * 0.3f;
@@ -569,6 +569,9 @@ void Game::handleEvents() {
                                     health1 = health2 = maxHealth;
                                     boostMeter1 = boostMeter2 = 0.0f;
                                     boostActive1 = boostActive2 = false;
+                                    shieldTimer1 = shieldTimer2 = 0.0f;
+                                    shieldCooldown1 = shieldCooldown2 = 0.0f;
+                                    boostParticleCount1 = boostParticleCount2 = 0;
                                     paddle1->x = 40.0f;
                                     paddle1->y = (float)(height - paddle1->height) * 0.5f;
                                     paddle2->x = (float)width - 40.0f - (float)paddle2->width;
@@ -671,8 +674,8 @@ void Game::handleEvents() {
                                 labelTimer = 0.0;
                             }
                         } else if (currentMenu == MENU_SETTINGS) {
-                            // SETTINGS: SCORE, AI, SIDE, MOVEMENT, BOOST, HP, VISUAL FX, P1 INPUT, P2 INPUT, BACK
-                            const int itemCount = 10;
+                            // SETTINGS: SCORE, AI, SIDE, MOVEMENT, BOOST, SHIELD, HP, VISUAL FX, P1 INPUT, P2 INPUT, BACK
+                            const int itemCount = 11;
                             if (sc == SDL_SCANCODE_UP) {
                                 menuSelection = (menuSelection - 1 + itemCount) % itemCount;
                             } else if (sc == SDL_SCANCODE_DOWN) {
@@ -702,19 +705,25 @@ void Game::handleEvents() {
                                 } else if (menuSelection == 4) {
                                     autoBoostEnabled = !autoBoostEnabled;
                                 } else if (menuSelection == 5) {
+                                    shieldEnabled = !shieldEnabled;
+                                    if (!shieldEnabled) {
+                                        shieldTimer1 = shieldTimer2 = 0.0f;
+                                        shieldCooldown1 = shieldCooldown2 = 0.0f;
+                                    }
+                                } else if (menuSelection == 6) {
                                     maxHealthIndex = (maxHealthIndex + 1) % 4;
                                     maxHealth = MaxHealthOptions[maxHealthIndex];
-                                } else if (menuSelection == 6) {
-                                    fxEnabled = !fxEnabled;
                                 } else if (menuSelection == 7) {
+                                    fxEnabled = !fxEnabled;
+                                } else if (menuSelection == 8) {
                                     // Toggle P1 input (mutual exclusion with P2)
                                     p1UseMouse = !p1UseMouse;
                                     if (p1UseMouse) p2UseMouse = false;
-                                } else if (menuSelection == 8) {
+                                } else if (menuSelection == 9) {
                                     // Toggle P2 input (mutual exclusion with P1)
                                     p2UseMouse = !p2UseMouse;
                                     if (p2UseMouse) p1UseMouse = false;
-                                } else if (menuSelection == 9) {
+                                } else if (menuSelection == 10) {
                                     // BACK
                                     currentMenu = hasActiveGame && !gameOver ? MENU_PAUSE : MENU_MAIN;
                                     menuSelection = 0;
@@ -917,6 +926,73 @@ void Game::update(double dt) {
         }
     }
     
+    // Shield activation & cooldown (Battle Mode only when enabled)
+    if (shieldEnabled && gameMode == MODE_BATTLE) {
+        float fdt = (float)dt;
+        // Tick down active timers
+        if (shieldTimer1 > 0.0f) {
+            shieldTimer1 -= fdt;
+            if (shieldTimer1 < 0.0f) shieldTimer1 = 0.0f;
+        }
+        if (shieldTimer2 > 0.0f) {
+            shieldTimer2 -= fdt;
+            if (shieldTimer2 < 0.0f) shieldTimer2 = 0.0f;
+        }
+        // Tick down cooldowns
+        if (shieldCooldown1 > 0.0f) {
+            shieldCooldown1 -= fdt;
+            if (shieldCooldown1 < 0.0f) shieldCooldown1 = 0.0f;
+        }
+        if (shieldCooldown2 > 0.0f) {
+            shieldCooldown2 -= fdt;
+            if (shieldCooldown2 < 0.0f) shieldCooldown2 = 0.0f;
+        }
+
+        // Player shield activation: P1 = Space, P2 = RAlt
+        if (singlePlayer) {
+            // Player activates shield (check player's own cooldown/timer)
+            {
+                float& pShieldTimer = (playerSide == 1) ? shieldTimer1 : shieldTimer2;
+                float& pShieldCooldown = (playerSide == 1) ? shieldCooldown1 : shieldCooldown2;
+                if (keys[SDL_SCANCODE_SPACE] && pShieldCooldown <= 0.0f && pShieldTimer <= 0.0f) {
+                    pShieldTimer = ShieldDuration;
+                    pShieldCooldown = ShieldCooldown;
+                }
+            }
+            // AI shield logic
+            Paddle* aiPaddle = (playerSide == 1) ? paddle2 : paddle1;
+            float& aiShieldTimer = (playerSide == 1) ? shieldTimer2 : shieldTimer1;
+            float& aiShieldCooldown = (playerSide == 1) ? shieldCooldown2 : shieldCooldown1;
+            if (aiShieldCooldown <= 0.0f && aiShieldTimer <= 0.0f && ball && ball->isPiercing) {
+                bool ballTowardAI = (playerSide == 1) ? (ball->velX > 0) : (ball->velX < 0);
+                if (ballTowardAI) {
+                    float dist = std::fabs(ball->x - (aiPaddle->x + aiPaddle->width * 0.5f));
+                    float triggerDist = 200.0f;
+                    bool activate = false;
+                    switch (aiDifficulty) {
+                        case AI_EASY: activate = false; break;
+                        case AI_MEDIUM: activate = (dist < triggerDist && ball->wallBounceCount >= 2); break;
+                        case AI_HARD: activate = (dist < triggerDist * 1.5f); break;
+                    }
+                    if (activate) {
+                        aiShieldTimer = ShieldDuration;
+                        aiShieldCooldown = ShieldCooldown;
+                    }
+                }
+            }
+        } else {
+            // PvP: P1 = Space, P2 = RAlt
+            if (keys[SDL_SCANCODE_SPACE] && shieldCooldown1 <= 0.0f && shieldTimer1 <= 0.0f) {
+                shieldTimer1 = ShieldDuration;
+                shieldCooldown1 = ShieldCooldown;
+            }
+            if (keys[SDL_SCANCODE_RALT] && shieldCooldown2 <= 0.0f && shieldTimer2 <= 0.0f) {
+                shieldTimer2 = ShieldDuration;
+                shieldCooldown2 = ShieldCooldown;
+            }
+        }
+    }
+
     // Apply boost multiplier to paddle speeds temporarily
     float originalSpeed1 = paddle1->speed;
     float originalSpeed2 = paddle2->speed;
@@ -1192,7 +1268,9 @@ void Game::update(double dt) {
         }
     }
 
-    ball->update(dt, width, height, *paddle1, *paddle2, score1, score2, health1, health2, boostMeter1, boostMeter2, gameMode == MODE_BATTLE);
+    bool s1Active = (shieldEnabled && shieldTimer1 > 0.0f);
+    bool s2Active = (shieldEnabled && shieldTimer2 > 0.0f);
+    ball->update(dt, width, height, *paddle1, *paddle2, score1, score2, health1, health2, boostMeter1, boostMeter2, gameMode == MODE_BATTLE, s1Active, s2Active);
     // Detect score changes to trigger a brief flash
     if (score1 != lastScore1 || score2 != lastScore2) {
         scoreFlashTimer = 0.3; // seconds
@@ -2198,6 +2276,107 @@ void Game::render() {
             glEnd();
         }
 
+        // Shield visual effects (Battle Mode only)
+        if (shieldEnabled && gameMode == MODE_BATTLE && fxEnabled) {
+            float shieldBarW = 40.0f;
+            float shieldBarH = 4.0f;
+            // Offset below boost bar
+            float shieldYOff = (gameMode == MODE_BATTLE) ? 30.0f : 20.0f;
+
+            // Shield barrier glow when active
+            auto drawShieldBarrier = [&](Paddle* pad, float timer) {
+                if (!pad || timer <= 0.0f) return;
+                float pulse = 0.6f + 0.4f * std::sin((float)labelTimer * 14.0f);
+                float alpha = 0.5f * pulse * (timer / ShieldDuration);
+                bool isLeft = (pad->upKey == SDL_SCANCODE_W);
+                float bx = isLeft ? (pad->x + pad->width + 2.0f) : (pad->x - 6.0f);
+                float by0 = pad->y - 4.0f;
+                float by1 = pad->y + pad->height + 4.0f;
+                float bw = 4.0f;
+                // Barrier quad
+                glBegin(GL_QUADS);
+                glColor4f(0.4f, 1.0f, 0.6f, alpha);
+                glVertex2f(bx, by0);
+                glVertex2f(bx + bw, by0);
+                glColor4f(0.2f, 0.9f, 1.0f, alpha * 0.7f);
+                glVertex2f(bx + bw, by1);
+                glVertex2f(bx, by1);
+                glEnd();
+                // Outer glow
+                float glowW = 8.0f;
+                float gx = isLeft ? (bx + bw) : (bx - glowW);
+                glBegin(GL_QUADS);
+                glColor4f(0.3f, 0.9f, 0.7f, alpha * 0.4f);
+                glVertex2f(bx, by0);
+                glVertex2f(bx + bw, by0);
+                glColor4f(0.2f, 0.8f, 1.0f, 0.0f);
+                if (isLeft) {
+                    glVertex2f(bx + bw + glowW, by1);
+                    glVertex2f(bx + bw + glowW, by0);
+                } else {
+                    glVertex2f(bx - glowW, by1);
+                    glVertex2f(bx - glowW, by0);
+                }
+                glEnd();
+            };
+            drawShieldBarrier(paddle1, shieldTimer1);
+            drawShieldBarrier(paddle2, shieldTimer2);
+
+            // Shield cooldown bars
+            auto drawShieldCooldown = [&](Paddle* pad, float cooldown, float timer) {
+                if (!pad) return;
+                bool isLeft = (pad->upKey == SDL_SCANCODE_W);
+                float sx, sy;
+                if (isLeft) {
+                    sx = pad->x + pad->width + 15.0f;
+                } else {
+                    sx = pad->x - 15.0f - shieldBarW;
+                }
+                sy = pad->y + pad->height * 0.5f + shieldYOff;
+
+                // Background
+                glBegin(GL_QUADS);
+                glColor4f(0.1f, 0.15f, 0.1f, 0.6f);
+                glVertex2f(sx - 1, sy - 1);
+                glVertex2f(sx + shieldBarW + 1, sy - 1);
+                glVertex2f(sx + shieldBarW + 1, sy + shieldBarH + 1);
+                glVertex2f(sx - 1, sy + shieldBarH + 1);
+                glEnd();
+
+                // Fill: green when ready, dim when cooling down
+                float fill = 1.0f;
+                float r = 0.3f, g = 0.9f, b = 0.5f;
+                if (timer > 0.0f) {
+                    // Shield is active — show remaining duration
+                    fill = timer / ShieldDuration;
+                    r = 0.4f; g = 1.0f; b = 0.7f;
+                } else if (cooldown > 0.0f) {
+                    fill = 1.0f - (cooldown / ShieldCooldown);
+                    r = 0.2f; g = 0.4f; b = 0.3f;
+                }
+                float fillW = shieldBarW * fill;
+                if (isLeft) {
+                    glBegin(GL_QUADS);
+                    glColor4f(r, g, b, 0.9f);
+                    glVertex2f(sx, sy);
+                    glVertex2f(sx + fillW, sy);
+                    glVertex2f(sx + fillW, sy + shieldBarH);
+                    glVertex2f(sx, sy + shieldBarH);
+                    glEnd();
+                } else {
+                    glBegin(GL_QUADS);
+                    glColor4f(r, g, b, 0.9f);
+                    glVertex2f(sx + shieldBarW - fillW, sy);
+                    glVertex2f(sx + shieldBarW, sy);
+                    glVertex2f(sx + shieldBarW, sy + shieldBarH);
+                    glVertex2f(sx + shieldBarW - fillW, sy + shieldBarH);
+                    glEnd();
+                }
+            };
+            drawShieldCooldown(paddle1, shieldCooldown1, shieldTimer1);
+            drawShieldCooldown(paddle2, shieldCooldown2, shieldTimer2);
+        }
+
         // Player labels near paddles
         if (labelTimer < 3.0) {
             float labelScale = 14.0f;
@@ -2251,8 +2430,8 @@ void Game::render() {
         } else if (currentMenu == MENU_MAIN || currentMenu == MENU_PLAY || currentMenu == MENU_SETTINGS) {
             // --- Shared menu rendering helper ---
             const char* headerText = nullptr;
-            const char* menuItems[11];
-            char dynamicLabels[11][48];
+            const char* menuItems[12];
+            char dynamicLabels[12][48];
             int itemCount = 0;
 
             if (currentMenu == MENU_MAIN) {
@@ -2290,13 +2469,14 @@ void Game::render() {
                 std::snprintf(dynamicLabels[2], sizeof(dynamicLabels[2]), "SIDE: %s", playerSide == 1 ? "LEFT" : "RIGHT");
                 std::snprintf(dynamicLabels[3], sizeof(dynamicLabels[3]), "MOVEMENT: %s", freeMovement ? "FREE" : "FIXED");
                 std::snprintf(dynamicLabels[4], sizeof(dynamicLabels[4]), "BOOST: %s", autoBoostEnabled ? "AUTO" : "MANUAL");
-                std::snprintf(dynamicLabels[5], sizeof(dynamicLabels[5]), "HP: %d", maxHealth);
-                std::snprintf(dynamicLabels[6], sizeof(dynamicLabels[6]), "VISUAL FX: %s", fxEnabled ? "ON" : "OFF");
-                std::snprintf(dynamicLabels[7], sizeof(dynamicLabels[7]), "P1 INPUT: %s", p1UseMouse ? "MOUSE" : "KEYBOARD");
-                std::snprintf(dynamicLabels[8], sizeof(dynamicLabels[8]), "P2 INPUT: %s", p2UseMouse ? "MOUSE" : "KEYBOARD");
-                for (int i = 0; i < 9; ++i) menuItems[i] = dynamicLabels[i];
-                menuItems[9] = "BACK";
-                itemCount = 10;
+                std::snprintf(dynamicLabels[5], sizeof(dynamicLabels[5]), "SHIELD: %s", shieldEnabled ? "ON" : "OFF");
+                std::snprintf(dynamicLabels[6], sizeof(dynamicLabels[6]), "HP: %d", maxHealth);
+                std::snprintf(dynamicLabels[7], sizeof(dynamicLabels[7]), "VISUAL FX: %s", fxEnabled ? "ON" : "OFF");
+                std::snprintf(dynamicLabels[8], sizeof(dynamicLabels[8]), "P1 INPUT: %s", p1UseMouse ? "MOUSE" : "KEYBOARD");
+                std::snprintf(dynamicLabels[9], sizeof(dynamicLabels[9]), "P2 INPUT: %s", p2UseMouse ? "MOUSE" : "KEYBOARD");
+                for (int i = 0; i < 10; ++i) menuItems[i] = dynamicLabels[i];
+                menuItems[10] = "BACK";
+                itemCount = 11;
             }
 
             // Header
@@ -2341,7 +2521,7 @@ void Game::render() {
 
                 bool isSelected = (i == menuSelection);
                 bool isBack = (currentMenu == MENU_PLAY && i == 4) ||
-                              (currentMenu == MENU_SETTINGS && i == 9);
+                              (currentMenu == MENU_SETTINGS && i == 10);
                 bool isQuit = (currentMenu == MENU_MAIN && i == itemCount - 1);
 
                 if (isSelected) {
