@@ -1072,7 +1072,8 @@ void Game::update(double dt) {
             checkCollect(shieldPickup2, paddle2, shieldHeld2);
         } else {
             // --- FIXED MOVEMENT: KEY-ACTIVATED ONE-USE SHIELD ---
-            if (singlePlayer) {
+            if (shieldEnabled) {
+                if (singlePlayer) {
                 // Player activates shield
                 bool& pHeld = (playerSide == 1) ? shieldHeld1 : shieldHeld2;
                 float& pCooldown = (playerSide == 1) ? shieldCooldown1 : shieldCooldown2;
@@ -1174,9 +1175,12 @@ void Game::update(double dt) {
                 float predictedY = ball->y + ball->velY * timeToReach;
                 // Handle wall bounces in prediction
                 float screenH = (float)height;
-                while (predictedY < 0 || predictedY > screenH) {
+                int maxBounces = 10;
+                int bounces = 0;
+                while ((predictedY < 0 || predictedY > screenH) && bounces < maxBounces) {
                     if (predictedY < 0) predictedY = -predictedY;
                     else if (predictedY > screenH) predictedY = 2 * screenH - predictedY;
+                    bounces++;
                 }
                 // Blend between current ball Y and predicted Y based on difficulty
                 targetY = ball->y * (1.0f - predictionBlend) + predictedY * predictionBlend;
@@ -1499,7 +1503,7 @@ void Game::update(double dt) {
         if (lastAiWin) {
             loseShatterActive = true;
 
-            Paddle* losingPaddle = paddle1;
+            Paddle* losingPaddle = (lastWinner == 1) ? paddle2 : paddle1;
             if (losingPaddle) {
                 float px0 = losingPaddle->x;
                 float py0 = losingPaddle->y;
@@ -1614,7 +1618,7 @@ void Game::update(double dt) {
             if (lastAiWin) {
                 loseShatterActive = true;
 
-                Paddle* losingPaddle = paddle1;
+                Paddle* losingPaddle = (lastWinner == 1) ? paddle2 : paddle1;
                 if (losingPaddle) {
                     float px0 = losingPaddle->x;
                     float py0 = losingPaddle->y;
