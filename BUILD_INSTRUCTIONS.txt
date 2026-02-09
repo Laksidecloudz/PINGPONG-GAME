@@ -1,0 +1,108 @@
+============================================
+AUDIO SYSTEM - BUILD INSTRUCTIONS
+============================================
+
+STEP 1: GET SDL3_MIXER
+----------------------
+Download SDL3_mixer development library from:
+https://github.com/libsdl-org/SDL_mixer/releases
+
+Files you need:
+- SDL3_mixer.dll (runtime - goes with your .exe)
+- SDL3_mixer.lib (link library - for building)
+- SDL3_mixer.h   (header - for includes)
+
+STEP 2: FILE PLACEMENT
+----------------------
+Copy these files to your project:
+
+1. SDL3_mixer.dll → Same folder as SDL3.dll and PingPong.exe
+2. SDL3_mixer.h   → Your include folder (with SDL3.h)
+3. SDL3_mixer.lib → Your lib folder (with SDL3.lib)
+
+STEP 3: UPDATE YOUR BUILD
+-------------------------
+Add to your compilation:
+- AudioManager.cpp source file
+- SDL3_mixer.lib link library
+
+Example MinGW command:
+g++ -o PingPong.exe main.cpp Game.cpp Ball.cpp Paddle.cpp AudioManager.cpp -lSDL3 -lSDL3_mixer -lopengl32
+
+Example VS Code tasks.json:
+{
+    "type": "cppbuild",
+    "label": "Build PingPong",
+    "command": "g++",
+    "args": [
+        "-o", "PingPong.exe",
+        "main.cpp", "Game.cpp", "Ball.cpp", "Paddle.cpp", "AudioManager.cpp",
+        "-lSDL3", "-lSDL3_mixer", "-lopengl32"
+    ]
+}
+
+STEP 4: VERIFY SOUND FILES
+--------------------------
+Ensure your WAV files are at these exact paths:
+
+assets/Music/SoupTonic UI1 SFX Pack 1 - wav (menu music)/
+├── SFX_UI_Confirm.wav
+├── SFX_UI_Cancel.wav
+├── SFX_UI_MenuSelections.wav
+├── SFX_UI_Pause.wav
+├── SFX_UI_Resume.wav
+├── SFX_UI_OpenMenu.wav
+├── SFX_UI_CloseMenu.wav
+├── SFX_UI_Equip.wav
+├── SFX_UI_Saved.wav
+├── SFX_UI_Shop.wav
+├── SFX_UI_Unequip.wav
+└── SFX_UI_Exit.wav
+
+STEP 5: TEST
+------------
+Run your game and test:
+1. Menu navigation - should hear sounds
+2. Settings menu - should see SOUND and VOLUME options
+3. Toggle SOUND - should mute/unmute
+4. Change VOLUME - should change loudness
+
+============================================
+TROUBLESHOOTING
+============================================
+
+NO SOUND PLAYING?
+-----------------
+1. Check SDL3_mixer.dll is in the same folder as .exe
+2. Check console output for loading errors
+3. Verify WAV file paths are correct
+4. Try setting VOLUME to 100% in settings
+
+BUILD ERRORS?
+-------------
+1. Make sure AudioManager.cpp is in your project
+2. Add -lSDL3_mixer to linker options
+3. Ensure SDL3_mixer.h is in include path
+
+GAME CRASHES?
+-------------
+Audio is designed to be non-critical. If SDL3_mixer.dll 
+is missing, the game should continue silently with a 
+console warning. Check console output for errors.
+
+============================================
+NEW FEATURES ADDED
+============================================
+
+SETTINGS MENU EXPANDED:
+- [SOUND: ON/OFF] - Toggle audio
+- [VOLUME: 75%] - Cycle 25/50/75/100%
+
+SOUND TRIGGERS:
+- Menu navigation, selection, back
+- Pause/Resume
+- Shield pickup and use
+- Win/Lose game
+- Settings changes
+
+============================================

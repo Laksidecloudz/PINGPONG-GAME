@@ -2,18 +2,17 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "build-pingpong",
+      "label": "build-pingpong-local",
       "type": "shell",
       "command": "C:/mingw64/bin/g++.exe",
       "args": [
         "-O2",
         "-I\"C:/libs/SDL3-3.2.26/include\"",
         "-I\"C:/libs/SDL3-3.2.26/include/SDL3\"",
-        "-I\"C:/Libs/SDL3_mixer-3.1.2/x86_64-w64-mingw32/include\"",
-        "-I\"C:/Libs/SDL3_mixer-3.1.2/x86_64-w64-mingw32/include/SDL3_mixer\"",
+        "-I\"${workspaceFolder}/include\"",
         "main.cpp", "Game.cpp", "Paddle.cpp", "Ball.cpp", "AudioManager.cpp",
         "-L\"C:/libs/SDL3-3.2.26/SDL3-devel-3.2.26-mingw/SDL3-3.2.26/x86_64-w64-mingw32/lib\"",
-        "-L\"C:/Libs/SDL3_mixer-3.1.2/x86_64-w64-mingw32/lib\"",
+        "-L\"${workspaceFolder}/lib\"",
         "-lSDL3",
         "-lSDL3_mixer",
         "-lopengl32",
@@ -21,7 +20,7 @@
       ],
       "group": {
         "kind": "build",
-        "isDefault": true
+        "isDefault": false
       },
       "problemMatcher": []
     }

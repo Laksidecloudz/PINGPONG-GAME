@@ -1,0 +1,127 @@
+===============================================
+SDL3_MIXER SETUP - FILE PLACEMENT GUIDE
+===============================================
+
+You have SDL3_mixer.dll in your project folder.
+Now you need the HEADER and LIB files to compile.
+
+-----------------------------------------------
+OPTION 1: Place in C:/libs (Recommended)
+-----------------------------------------------
+
+1. Create folder: C:/libs/SDL3_mixer-3.0.0
+
+2. From SDL3_mixer download, copy:
+   
+   SDL3_mixer-3.0.0/
+   ├── include/
+   │   └── SDL3_mixer/
+   │       └── SDL_mixer.h
+   └── lib/
+       └── x64/
+           ├── SDL3_mixer.dll
+           ├── SDL3_mixer.lib
+           └── SDL3_mixer.dll.a
+
+3. Also copy SDL3_mixer.dll to your project folder
+   (you already have this)
+
+4. Build with tasks.json (already updated)
+
+-----------------------------------------------
+OPTION 2: Place in Project Folder
+-----------------------------------------------
+
+1. In your project folder, create:
+   
+   PINGPONG-GAME/
+   ├── include/
+   │   └── SDL3_mixer/
+   │       └── SDL_mixer.h
+   ├── lib/
+   │   └── SDL3_mixer.lib
+   ├── SDL3_mixer.dll    (you have this)
+   └── ... other files
+
+2. Rename tasks.json to tasks-backup.json
+   Rename tasks-alternative.json to tasks.json
+
+3. Build
+
+-----------------------------------------------
+OPTION 3: Quick & Dirty (Not Recommended)
+-----------------------------------------------
+
+If you just want to test quickly without proper setup,
+extract SDL3_mixer-devel-3.0.0-mingw.zip and:
+
+1. Copy SDL_mixer.h from include/ to C:/libs/SDL3-3.2.26/include/SDL3/
+2. Copy SDL3_mixer.lib and SDL3_mixer.dll.a from lib/ to C:/libs/SDL3-3.2.26/.../lib/
+
+Then use this modified tasks.json:
+
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build-pingpong",
+      "type": "shell",
+      "command": "C:/mingw64/bin/g++.exe",
+      "args": [
+        "-O2",
+        "-I\"C:/libs/SDL3-3.2.26/include\"",
+        "-I\"C:/libs/SDL3-3.2.26/include/SDL3\"",
+        "main.cpp", "Game.cpp", "Paddle.cpp", "Ball.cpp", "AudioManager.cpp",
+        "-L\"C:/libs/SDL3-3.2.26/SDL3-devel-3.2.26-mingw/SDL3-3.2.26/x86_64-w64-mingw32/lib\"",
+        "-lSDL3",
+        "-lSDL3_mixer",
+        "-lopengl32",
+        "-o", "PingPong.exe"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    }
+  ]
+}
+
+-----------------------------------------------
+DOWNLOAD LINK
+-----------------------------------------------
+
+If you don't have the full SDL3_mixer package:
+https://github.com/libsdl-org/SDL_mixer/releases
+
+Download: SDL3_mixer-devel-3.0.0-mingw.zip (or latest)
+
+-----------------------------------------------
+VERIFICATION
+-----------------------------------------------
+
+After setup, these files should exist:
+
+[For Option 1]
+C:/libs/SDL3_mixer-3.0.0/include/SDL3_mixer/SDL_mixer.h
+C:/libs/SDL3_mixer-3.0.0/lib/x64/SDL3_mixer.lib
+C:/libs/SDL3_mixer-3.0.0/lib/x64/SDL3_mixer.dll.a
+
+[For Option 2]
+C:/.../PINGPONG-GAME/include/SDL3_mixer/SDL_mixer.h
+C:/.../PINGPONG-GAME/lib/SDL3_mixer.lib
+
+[For Option 3]
+C:/libs/SDL3-3.2.26/include/SDL3/SDL_mixer.h
+C:/libs/SDL3-3.2.26/.../lib/SDL3_mixer.lib
+
+-----------------------------------------------
+BUILD OUTPUT
+-----------------------------------------------
+
+Successful build should show:
+- No "SDL_mixer.h not found" errors
+- No "undefined reference to Mix_" errors
+- PingPong.exe created
+
+===============================================

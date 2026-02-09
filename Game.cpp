@@ -8,6 +8,10 @@
 #include <cmath>
 #include <cstdlib>
 
+// stb_image for loading PNG files
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 const int Game::MaxHealthOptions[4] = { 5, 10, 15, 20 };
 
 static inline bool aabbOverlap(float ax, float ay, float aw, float ah,
@@ -407,6 +411,15 @@ bool Game::init() {
     }
 
     std::srand((unsigned int)SDL_GetPerformanceCounter());
+    
+    // Initialize audio system (non-critical - game continues if audio fails)
+    if (!AudioManager::getInstance().init()) {
+        std::fprintf(stderr, "Warning: Audio initialization failed. Continuing without sound.\n");
+    } else {
+        // Apply initial audio settings
+        AudioManager::getInstance().setMuted(!soundEnabled);
+        AudioManager::getInstance().setUIVolume(volumePercent * 128 / 100);
+    }
 
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
@@ -439,6 +452,20 @@ bool Game::init() {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     resetProjection();
+
+    // Load splash screen texture
+    const char* splashPath = "assets/Logos/ChatGPT Image Feb 8, 2026, 01_07_20 PM.png";
+    if (!loadSplashTexture(splashPath)) {
+        std::fprintf(stderr, "Warning: Could not load splash screen image. Continuing without it.\n");
+        inSplashScreen = false;
+        inStartScreen = true;
+        paused = true;
+        currentMenu = MENU_MAIN;
+    } else {
+        inSplashScreen = true;
+        inStartScreen = false;
+        splashTimer = 0.0;
+    }
 
     // Create entities
     const int paddleW = 16;
@@ -488,7 +515,7 @@ int Game::menuHitTest(float my) const {
         spacing = 18.0f * 1.6f;
         if (currentMenu == MENU_MAIN) count = hasActiveGame ? 4 : 3;
         else if (currentMenu == MENU_PLAY) count = 5;
-        else if (currentMenu == MENU_SETTINGS) count = 11;
+        else if (currentMenu == MENU_SETTINGS) count = 13;
     } else if (currentMenu == MENU_PAUSE) {
         float hs = 28.0f;
         float hy = (float)height * 0.3f;
@@ -518,8 +545,18 @@ void Game::handleEvents() {
         } else if (e.type == SDL_EVENT_KEY_DOWN) {
             SDL_Scancode sc = e.key.scancode;
 
-            if (inStartScreen) {
+            if (inSplashScreen) {
+                // Skip splash screen on any key press
+                inSplashScreen = false;
+                inStartScreen = true;
+                paused = true;
+                currentMenu = MENU_MAIN;
+                menuSelection = 0;
+                menuAnimTimer = 0.0;
+                labelTimer = 0.0;
+            } else if (inStartScreen) {
                 if (sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_KP_ENTER) {
+                    AudioManager::getInstance().playUI(UISound::OPEN_MENU);
                     inStartScreen = false;
                     currentMenu = MENU_MAIN;
                     paused = true;
@@ -527,6 +564,7 @@ void Game::handleEvents() {
                     menuAnimTimer = 0.0;
                     labelTimer = 0.0;
                 } else if (sc == SDL_SCANCODE_ESCAPE) {
+                    AudioManager::getInstance().playUI(UISound::EXIT);
                     isRunning = false;
                 }
             } else {
@@ -547,26 +585,32 @@ void Game::handleEvents() {
                 // ESC: navigate back through menu hierarchy
                 if (sc == SDL_SCANCODE_ESCAPE) {
                     if (inColorMenu) {
+                        AudioManager::getInstance().playUI(UISound::CANCEL);
                         inColorMenu = false;
                         pendingMode = -1;
                         colorMenuPlayer = 0;
                         colorSelection = 0;
                     } else if (currentMenu == MENU_MAIN) {
+                        AudioManager::getInstance().playUI(UISound::EXIT);
                         isRunning = false;
                     } else if (currentMenu == MENU_PLAY) {
+                        AudioManager::getInstance().playUI(UISound::CANCEL);
                         currentMenu = MENU_MAIN;
                         menuSelection = 0;
                         menuAnimTimer = 0.0;
                     } else if (currentMenu == MENU_SETTINGS) {
+                        AudioManager::getInstance().playUI(UISound::CANCEL);
                         // Return to where we came from
                         currentMenu = hasActiveGame && !gameOver ? MENU_PAUSE : MENU_MAIN;
                         menuSelection = 0;
                         menuAnimTimer = 0.0;
                     } else if (currentMenu == MENU_PAUSE) {
                         // Resume game
+                        AudioManager::getInstance().playUI(UISound::RESUME);
                         paused = false;
                         currentMenu = MENU_NONE;
                     } else if (gameOver) {
+                        AudioManager::getInstance().playUI(UISound::CANCEL);
                         currentMenu = MENU_MAIN;
                         paused = true;
                         gameOver = false;
@@ -575,6 +619,7 @@ void Game::handleEvents() {
                         labelTimer = 0.0;
                     } else {
                         // In gameplay: open pause menu
+                        AudioManager::getInstance().playUI(UISound::PAUSE);
                         paused = true;
                         currentMenu = MENU_PAUSE;
                         menuSelection = 0;
@@ -590,10 +635,13 @@ void Game::handleEvents() {
                         if (inColorMenu) {
                             const int menuItems = 5;
                             if (sc == SDL_SCANCODE_UP) {
+                                AudioManager::getInstance().playUI(UISound::SELECT);
                                 colorSelection = (colorSelection - 1 + menuItems) % menuItems;
                             } else if (sc == SDL_SCANCODE_DOWN) {
+                                AudioManager::getInstance().playUI(UISound::SELECT);
                                 colorSelection = (colorSelection + 1) % menuItems;
                             } else if (sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_KP_ENTER) {
+                                AudioManager::getInstance().playUI(UISound::CONFIRM);
                                 if (colorMenuPlayer == 0) {
                                     if (colorSelection == 4) {
                                         p1RandomColor = true;
@@ -657,38 +705,47 @@ void Game::handleEvents() {
                             // MAIN MENU: PLAY, [CONTINUE], SETTINGS, QUIT
                             int itemCount = hasActiveGame ? 4 : 3;
                             if (sc == SDL_SCANCODE_UP) {
+                                AudioManager::getInstance().playUI(UISound::SELECT);
                                 menuSelection = (menuSelection - 1 + itemCount) % itemCount;
                             } else if (sc == SDL_SCANCODE_DOWN) {
+                                AudioManager::getInstance().playUI(UISound::SELECT);
                                 menuSelection = (menuSelection + 1) % itemCount;
                             } else if (sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_KP_ENTER) {
                                 if (hasActiveGame) {
                                     // 0=PLAY, 1=CONTINUE, 2=SETTINGS, 3=QUIT
                                     if (menuSelection == 0) {
+                                        AudioManager::getInstance().playUI(UISound::CONFIRM);
                                         currentMenu = MENU_PLAY;
                                         menuSelection = 0;
                                         menuAnimTimer = 0.0;
                                     } else if (menuSelection == 1) {
+                                        AudioManager::getInstance().playUI(UISound::CONFIRM);
                                         // Continue existing game
                                         paused = false;
                                         currentMenu = MENU_NONE;
                                     } else if (menuSelection == 2) {
+                                        AudioManager::getInstance().playUI(UISound::CONFIRM);
                                         currentMenu = MENU_SETTINGS;
                                         menuSelection = 0;
                                         menuAnimTimer = 0.0;
                                     } else if (menuSelection == 3) {
+                                        AudioManager::getInstance().playUI(UISound::EXIT);
                                         isRunning = false;
                                     }
                                 } else {
                                     // 0=PLAY, 1=SETTINGS, 2=QUIT
                                     if (menuSelection == 0) {
+                                        AudioManager::getInstance().playUI(UISound::CONFIRM);
                                         currentMenu = MENU_PLAY;
                                         menuSelection = 0;
                                         menuAnimTimer = 0.0;
                                     } else if (menuSelection == 1) {
+                                        AudioManager::getInstance().playUI(UISound::CONFIRM);
                                         currentMenu = MENU_SETTINGS;
                                         menuSelection = 0;
                                         menuAnimTimer = 0.0;
                                     } else if (menuSelection == 2) {
+                                        AudioManager::getInstance().playUI(UISound::EXIT);
                                         isRunning = false;
                                     }
                                 }
@@ -698,16 +755,20 @@ void Game::handleEvents() {
                             // PLAY: CLASSIC VS AI, CLASSIC PVP, BATTLE VS AI, BATTLE PVP, BACK
                             const int itemCount = 5;
                             if (sc == SDL_SCANCODE_UP) {
+                                AudioManager::getInstance().playUI(UISound::SELECT);
                                 menuSelection = (menuSelection - 1 + itemCount) % itemCount;
                             } else if (sc == SDL_SCANCODE_DOWN) {
+                                AudioManager::getInstance().playUI(UISound::SELECT);
                                 menuSelection = (menuSelection + 1) % itemCount;
                             } else if (sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_KP_ENTER) {
                                 if (menuSelection == 4) {
                                     // BACK
+                                    AudioManager::getInstance().playUI(UISound::CANCEL);
                                     currentMenu = MENU_MAIN;
                                     menuSelection = 0;
                                     menuAnimTimer = 0.0;
                                 } else {
+                                    AudioManager::getInstance().playUI(UISound::SHOP);  // Color select menu
                                     // 0=CLASSIC AI, 1=CLASSIC PVP, 2=BATTLE AI, 3=BATTLE PVP
                                     if (menuSelection == 0) {
                                         gameMode = MODE_CLASSIC;
@@ -741,61 +802,78 @@ void Game::handleEvents() {
                                 labelTimer = 0.0;
                             }
                         } else if (currentMenu == MENU_SETTINGS) {
-                            // SETTINGS: SCORE, AI, SIDE, MOVEMENT, BOOST, SHIELD, HP, VISUAL FX, P1 INPUT, P2 INPUT, BACK
-                            const int itemCount = 11;
+                            // SETTINGS: SCORE, AI, SIDE, MOVEMENT, BOOST, SHIELD, HP, VISUAL FX, SOUND, VOLUME, P1 INPUT, P2 INPUT, BACK
+                            const int itemCount = 13;
                             if (sc == SDL_SCANCODE_UP) {
+                                AudioManager::getInstance().playUI(UISound::SELECT);
                                 menuSelection = (menuSelection - 1 + itemCount) % itemCount;
                             } else if (sc == SDL_SCANCODE_DOWN) {
+                                AudioManager::getInstance().playUI(UISound::SELECT);
                                 menuSelection = (menuSelection + 1) % itemCount;
                             } else if (sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_KP_ENTER) {
-                                if (menuSelection == 0) {
-                                    // Cycle score target: 15 → 30 → Endless → 15
-                                    if (!endlessMode && targetScore == 15) {
-                                        targetScore = 30;
-                                    } else if (!endlessMode && targetScore == 30) {
-                                        endlessMode = true;
-                                        targetScore = 0;
-                                    } else {
-                                        endlessMode = false;
-                                        targetScore = 15;
-                                    }
-                                } else if (menuSelection == 1) {
-                                    aiDifficulty = (AIDifficulty)((aiDifficulty + 1) % 3);
-                                } else if (menuSelection == 2) {
-                                    playerSide = (playerSide == 1) ? 2 : 1;
-                                } else if (menuSelection == 3) {
-                                    freeMovement = !freeMovement;
-                                    if (!freeMovement) {
-                                        paddle1->x = 40.0f;
-                                        paddle2->x = (float)width - 40.0f - (float)paddle2->width;
-                                    }
-                                } else if (menuSelection == 4) {
-                                    autoBoostEnabled = !autoBoostEnabled;
-                                } else if (menuSelection == 5) {
-                                    shieldEnabled = !shieldEnabled;
-                                    if (!shieldEnabled) {
-                                        shieldHeld1 = shieldHeld2 = false;
-                                        shieldCooldown1 = shieldCooldown2 = 0.0f;
-                                        shieldPickup1.active = shieldPickup2.active = false;
-                                    }
-                                } else if (menuSelection == 6) {
-                                    maxHealthIndex = (maxHealthIndex + 1) % 4;
-                                    maxHealth = MaxHealthOptions[maxHealthIndex];
-                                } else if (menuSelection == 7) {
-                                    fxEnabled = !fxEnabled;
-                                } else if (menuSelection == 8) {
-                                    // Toggle P1 input (mutual exclusion with P2)
-                                    p1UseMouse = !p1UseMouse;
-                                    if (p1UseMouse) p2UseMouse = false;
-                                } else if (menuSelection == 9) {
-                                    // Toggle P2 input (mutual exclusion with P1)
-                                    p2UseMouse = !p2UseMouse;
-                                    if (p2UseMouse) p1UseMouse = false;
-                                } else if (menuSelection == 10) {
+                                if (menuSelection == 12) {
                                     // BACK
+                                    AudioManager::getInstance().playUI(UISound::CANCEL);
                                     currentMenu = hasActiveGame && !gameOver ? MENU_PAUSE : MENU_MAIN;
                                     menuSelection = 0;
                                     menuAnimTimer = 0.0;
+                                } else {
+                                    AudioManager::getInstance().playUI(UISound::SAVED);
+                                    if (menuSelection == 0) {
+                                        // Cycle score target: 15 → 30 → Endless → 15
+                                        if (!endlessMode && targetScore == 15) {
+                                            targetScore = 30;
+                                        } else if (!endlessMode && targetScore == 30) {
+                                            endlessMode = true;
+                                            targetScore = 0;
+                                        } else {
+                                            endlessMode = false;
+                                            targetScore = 15;
+                                        }
+                                    } else if (menuSelection == 1) {
+                                        aiDifficulty = (AIDifficulty)((aiDifficulty + 1) % 3);
+                                    } else if (menuSelection == 2) {
+                                        playerSide = (playerSide == 1) ? 2 : 1;
+                                    } else if (menuSelection == 3) {
+                                        freeMovement = !freeMovement;
+                                        if (!freeMovement) {
+                                            paddle1->x = 40.0f;
+                                            paddle2->x = (float)width - 40.0f - (float)paddle2->width;
+                                        }
+                                    } else if (menuSelection == 4) {
+                                        autoBoostEnabled = !autoBoostEnabled;
+                                    } else if (menuSelection == 5) {
+                                        shieldEnabled = !shieldEnabled;
+                                        if (!shieldEnabled) {
+                                            shieldHeld1 = shieldHeld2 = false;
+                                            shieldCooldown1 = shieldCooldown2 = 0.0f;
+                                            shieldPickup1.active = shieldPickup2.active = false;
+                                        }
+                                    } else if (menuSelection == 6) {
+                                        maxHealthIndex = (maxHealthIndex + 1) % 4;
+                                        maxHealth = MaxHealthOptions[maxHealthIndex];
+                                    } else if (menuSelection == 7) {
+                                        fxEnabled = !fxEnabled;
+                                    } else if (menuSelection == 8) {
+                                        // Toggle sound on/off
+                                        soundEnabled = !soundEnabled;
+                                        AudioManager::getInstance().setMuted(!soundEnabled);
+                                    } else if (menuSelection == 9) {
+                                        // Cycle volume: 25 → 50 → 75 → 100 → 25
+                                        if (volumePercent == 25) volumePercent = 50;
+                                        else if (volumePercent == 50) volumePercent = 75;
+                                        else if (volumePercent == 75) volumePercent = 100;
+                                        else volumePercent = 25;
+                                        AudioManager::getInstance().setUIVolume(volumePercent * 128 / 100);
+                                    } else if (menuSelection == 10) {
+                                        // Toggle P1 input (mutual exclusion with P2)
+                                        p1UseMouse = !p1UseMouse;
+                                        if (p1UseMouse) p2UseMouse = false;
+                                    } else if (menuSelection == 11) {
+                                        // Toggle P2 input (mutual exclusion with P1)
+                                        p2UseMouse = !p2UseMouse;
+                                        if (p2UseMouse) p1UseMouse = false;
+                                    }
                                 }
                                 labelTimer = 0.0;
                             }
@@ -803,21 +881,26 @@ void Game::handleEvents() {
                             // PAUSE: RESUME, SETTINGS, MAIN MENU
                             const int itemCount = 3;
                             if (sc == SDL_SCANCODE_UP) {
+                                AudioManager::getInstance().playUI(UISound::SELECT);
                                 menuSelection = (menuSelection - 1 + itemCount) % itemCount;
                             } else if (sc == SDL_SCANCODE_DOWN) {
+                                AudioManager::getInstance().playUI(UISound::SELECT);
                                 menuSelection = (menuSelection + 1) % itemCount;
                             } else if (sc == SDL_SCANCODE_RETURN || sc == SDL_SCANCODE_KP_ENTER) {
                                 if (menuSelection == 0) {
                                     // Resume
+                                    AudioManager::getInstance().playUI(UISound::RESUME);
                                     paused = false;
                                     currentMenu = MENU_NONE;
                                 } else if (menuSelection == 1) {
                                     // Settings
+                                    AudioManager::getInstance().playUI(UISound::CONFIRM);
                                     currentMenu = MENU_SETTINGS;
                                     menuSelection = 0;
                                     menuAnimTimer = 0.0;
                                 } else if (menuSelection == 2) {
                                     // Main Menu
+                                    AudioManager::getInstance().playUI(UISound::CLOSE_MENU);
                                     currentMenu = MENU_MAIN;
                                     gameOver = false;
                                     menuSelection = 0;
@@ -828,6 +911,7 @@ void Game::handleEvents() {
                         }
                     } else {
                         if (sc == SDL_SCANCODE_P) {
+                            AudioManager::getInstance().playUI(UISound::PAUSE);
                             paused = true;
                             currentMenu = MENU_PAUSE;
                             menuSelection = 0;
@@ -857,7 +941,18 @@ void Game::handleEvents() {
         } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
             mouseX = e.button.x;
             mouseY = e.button.y;
-            if (inStartScreen) {
+            if (inSplashScreen) {
+                // Skip splash screen on mouse click
+                AudioManager::getInstance().playUI(UISound::OPEN_MENU);
+                inSplashScreen = false;
+                inStartScreen = true;
+                paused = true;
+                currentMenu = MENU_MAIN;
+                menuSelection = 0;
+                menuAnimTimer = 0.0;
+                labelTimer = 0.0;
+            } else if (inStartScreen) {
+                AudioManager::getInstance().playUI(UISound::OPEN_MENU);
                 inStartScreen = false;
                 currentMenu = MENU_MAIN;
                 paused = true;
@@ -865,6 +960,7 @@ void Game::handleEvents() {
                 menuAnimTimer = 0.0;
                 labelTimer = 0.0;
             } else if (inWinLoseScreen) {
+                AudioManager::getInstance().playUI(UISound::CONFIRM);
                 inWinLoseScreen = false;
                 winLoseShowPrompt = false;
                 winLoseTimer = 0.0;
@@ -1066,6 +1162,7 @@ void Game::update(double dt) {
                 if (aabbOverlap(px0, py0, pw, ph, sx0, sy0, pickupSize, pickupSize)) {
                     held = true;
                     pickup.active = false;
+                    AudioManager::getInstance().playUI(UISound::EQUIP);
                 }
             };
             checkCollect(shieldPickup1, paddle1, shieldHeld1);
@@ -1095,16 +1192,24 @@ void Game::update(double dt) {
                             case AI_MEDIUM: activate = (dist < 200.0f && ball->wallBounceCount >= 2); break;
                             case AI_HARD: activate = (dist < 300.0f); break;
                         }
-                        if (activate) aiHeld = true;
+                        if (activate) {
+                            aiHeld = true;
+                            // AI shield activation (quiet sound)
+                            AudioManager::getInstance().setUIVolume(AudioManager::getInstance().getUIVolume() / 2);
+                            AudioManager::getInstance().playUI(UISound::EQUIP);
+                            AudioManager::getInstance().setUIVolume(volumePercent * 128 / 100);
+                        }
                     }
                 }
             } else {
                 // PvP: P1 = Space, P2 = RAlt
                 if (keys[SDL_SCANCODE_SPACE] && !shieldHeld1 && shieldCooldown1 <= 0.0f) {
                     shieldHeld1 = true;
+                    AudioManager::getInstance().playUI(UISound::EQUIP);
                 }
                 if (keys[SDL_SCANCODE_RALT] && !shieldHeld2 && shieldCooldown2 <= 0.0f) {
                     shieldHeld2 = true;
+                    AudioManager::getInstance().playUI(UISound::EQUIP);
                 }
             }
         }
@@ -1465,6 +1570,10 @@ void Game::update(double dt) {
     bool s1Before = shieldHeld1;
     bool s2Before = shieldHeld2;
     ball->update(dt, width, height, *paddle1, *paddle2, score1, score2, health1, health2, boostMeter1, boostMeter2, gameMode == MODE_BATTLE, shieldHeld1, shieldHeld2);
+    // Detect shield consumption and play sound
+    if ((s1Before && !shieldHeld1) || (s2Before && !shieldHeld2)) {
+        AudioManager::getInstance().playUI(UISound::UNEQUIP);
+    }
     // Start cooldown when shield is consumed (fixed mode only)
     if (!freeMovement && shieldEnabled && gameMode == MODE_BATTLE) {
         if (s1Before && !shieldHeld1) shieldCooldown1 = ShieldCooldown;
@@ -1501,6 +1610,13 @@ void Game::update(double dt) {
         orbitBallCount = 0;
         loseShatterTimer = 0.0;
         winDanceTimer = 0.0;
+
+        // Play win/lose sound
+        if (lastAiWin) {
+            AudioManager::getInstance().playUI(UISound::CANCEL);  // Loss sound
+        } else {
+            AudioManager::getInstance().playUI(UISound::CONFIRM); // Win sound
+        }
 
         if (lastAiWin) {
             loseShatterActive = true;
@@ -1617,6 +1733,13 @@ void Game::update(double dt) {
             loseShatterTimer = 0.0;
             winDanceTimer = 0.0;
 
+            // Play win/lose sound
+            if (lastAiWin) {
+                AudioManager::getInstance().playUI(UISound::CANCEL);  // Loss sound
+            } else {
+                AudioManager::getInstance().playUI(UISound::CONFIRM); // Win sound
+            }
+
             if (lastAiWin) {
                 loseShatterActive = true;
 
@@ -1725,9 +1848,16 @@ void Game::update(double dt) {
         }
     }
 }
+}
 
 void Game::render() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    // Splash screen
+    if (inSplashScreen) {
+        renderSplashScreen();
+        return;
+    }
 
     // Start screen: pure 2D UI
     if (inStartScreen) {
@@ -2699,8 +2829,8 @@ void Game::render() {
         } else if (currentMenu == MENU_MAIN || currentMenu == MENU_PLAY || currentMenu == MENU_SETTINGS) {
             // --- Shared menu rendering helper ---
             const char* headerText = nullptr;
-            const char* menuItems[12];
-            char dynamicLabels[12][48];
+            const char* menuItems[14];
+            char dynamicLabels[14][48];
             int itemCount = 0;
 
             if (currentMenu == MENU_MAIN) {
@@ -2741,11 +2871,13 @@ void Game::render() {
                 std::snprintf(dynamicLabels[5], sizeof(dynamicLabels[5]), "SHIELD: %s", shieldEnabled ? "ON" : "OFF");
                 std::snprintf(dynamicLabels[6], sizeof(dynamicLabels[6]), "HP: %d", maxHealth);
                 std::snprintf(dynamicLabels[7], sizeof(dynamicLabels[7]), "VISUAL FX: %s", fxEnabled ? "ON" : "OFF");
-                std::snprintf(dynamicLabels[8], sizeof(dynamicLabels[8]), "P1 INPUT: %s", p1UseMouse ? "MOUSE" : "KEYBOARD");
-                std::snprintf(dynamicLabels[9], sizeof(dynamicLabels[9]), "P2 INPUT: %s", p2UseMouse ? "MOUSE" : "KEYBOARD");
-                for (int i = 0; i < 10; ++i) menuItems[i] = dynamicLabels[i];
-                menuItems[10] = "BACK";
-                itemCount = 11;
+                std::snprintf(dynamicLabels[8], sizeof(dynamicLabels[8]), "SOUND: %s", soundEnabled ? "ON" : "OFF");
+                std::snprintf(dynamicLabels[9], sizeof(dynamicLabels[9]), "VOLUME: %d%%", volumePercent);
+                std::snprintf(dynamicLabels[10], sizeof(dynamicLabels[10]), "P1 INPUT: %s", p1UseMouse ? "MOUSE" : "KEYBOARD");
+                std::snprintf(dynamicLabels[11], sizeof(dynamicLabels[11]), "P2 INPUT: %s", p2UseMouse ? "MOUSE" : "KEYBOARD");
+                for (int i = 0; i < 12; ++i) menuItems[i] = dynamicLabels[i];
+                menuItems[12] = "BACK";
+                itemCount = 13;
             }
 
             // Header
@@ -3196,13 +3328,35 @@ void Game::run() {
         lastCounter = now;
 
         handleEvents();
-        update(dt);
+        
+        // Handle splash screen timing
+        if (inSplashScreen) {
+            splashTimer += dt;
+            double totalDuration = splashFadeInDuration + splashHoldDuration + splashFadeOutDuration;
+            if (splashTimer >= totalDuration) {
+                // Splash screen finished, transition to start screen
+                inSplashScreen = false;
+                inStartScreen = true;
+                paused = true;
+                currentMenu = MENU_MAIN;
+                menuSelection = 0;
+                menuAnimTimer = 0.0;
+            }
+        } else {
+            update(dt);
+        }
+        
         render();
         SDL_GL_SwapWindow(window);
     }
 }
 
 void Game::clean() {
+    cleanupSplashTexture();
+    
+    // Cleanup audio system
+    AudioManager::getInstance().cleanup();
+    
     delete ball;
     delete paddle1;
     delete paddle2;
@@ -3216,4 +3370,114 @@ void Game::clean() {
         window = nullptr;
     }
     SDL_Quit();
+}
+
+// Splash screen implementation
+bool Game::loadSplashTexture(const char* filepath) {
+    int channels = 0;
+    unsigned char* data = stbi_load(filepath, &splashImageWidth, &splashImageHeight, &channels, 4);
+    if (!data) {
+        std::fprintf(stderr, "Failed to load splash image: %s\n", filepath);
+        return false;
+    }
+
+    // No need to flip - we'll fix it with texture coordinates
+
+    glGenTextures(1, &splashTexture);
+    glBindTexture(GL_TEXTURE_2D, splashTexture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, splashImageWidth, splashImageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    stbi_image_free(data);
+    splashTextureLoaded = true;
+    return true;
+}
+
+void Game::renderSplashScreen() {
+    // Calculate alpha based on splash phase
+    float alpha = 1.0f;
+    if (splashTimer < splashFadeInDuration) {
+        // Fade in
+        alpha = (float)(splashTimer / splashFadeInDuration);
+    } else if (splashTimer < splashFadeInDuration + splashHoldDuration) {
+        // Hold
+        alpha = 1.0f;
+    } else if (splashTimer < splashFadeInDuration + splashHoldDuration + splashFadeOutDuration) {
+        // Fade out
+        double fadeOutTime = splashTimer - splashFadeInDuration - splashHoldDuration;
+        alpha = 1.0f - (float)(fadeOutTime / splashFadeOutDuration);
+    } else {
+        alpha = 0.0f;
+    }
+
+    // Clamp alpha
+    if (alpha < 0.0f) alpha = 0.0f;
+    if (alpha > 1.0f) alpha = 1.0f;
+
+    // Clear background
+    glClearColor(0.06f, 0.07f, 0.10f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    // Disable depth testing for 2D splash screen
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    // Set up 2D ortho projection
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(0.0, (GLdouble)width, (GLdouble)height, 0.0, -1.0, 1.0);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+
+    if (splashTextureLoaded && alpha > 0.0f) {
+        glEnable(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, splashTexture);
+        glColor4f(1.0f, 1.0f, 1.0f, alpha);
+
+        // Calculate image display size (fill entire window)
+        float maxWidth = (float)width;
+        float maxHeight = (float)height;
+        
+        float imgAspect = (float)splashImageWidth / (float)splashImageHeight;
+        float screenAspect = maxWidth / maxHeight;
+        
+        float drawWidth, drawHeight;
+        if (imgAspect > screenAspect) {
+            drawWidth = maxWidth;
+            drawHeight = maxWidth / imgAspect;
+        } else {
+            drawHeight = maxHeight;
+            drawWidth = maxHeight * imgAspect;
+        }
+
+        float x = ((float)width - drawWidth) * 0.5f;
+        float y = ((float)height - drawHeight) * 0.5f;
+
+        // Draw textured quad (U flipped to fix mirrored image, V flipped for OpenGL)
+        glBegin(GL_QUADS);
+        glTexCoord2f(1.0f, 1.0f); glVertex2f(x, y);                        // top-left of screen = top-right of texture
+        glTexCoord2f(0.0f, 1.0f); glVertex2f(x + drawWidth, y);            // top-right of screen = top-left of texture
+        glTexCoord2f(0.0f, 0.0f); glVertex2f(x + drawWidth, y + drawHeight); // bottom-right of screen = bottom-left of texture
+        glTexCoord2f(1.0f, 0.0f); glVertex2f(x, y + drawHeight);           // bottom-left of screen = bottom-right of texture
+        glEnd();
+
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glDisable(GL_TEXTURE_2D);
+    }
+
+    // Re-enable depth test for subsequent renders
+    glEnable(GL_DEPTH_TEST);
+}
+
+void Game::cleanupSplashTexture() {
+    if (splashTexture != 0) {
+        glDeleteTextures(1, &splashTexture);
+        splashTexture = 0;
+    }
+    splashTextureLoaded = false;
 }
