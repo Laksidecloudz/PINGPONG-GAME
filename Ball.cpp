@@ -1,5 +1,6 @@
 #include "Ball.h"
 #include "Paddle.h"
+#include "AudioManager_Fixed.h"
 #include "SDL3/SDL_opengl.h"
 #include <cmath>
 #include <cstdlib>
@@ -82,6 +83,9 @@ void Ball::update(double dt, int screenW, int screenH,
             isPiercing = true;
             wallBounceCount++;
         }
+        
+        // Play wall bounce sound
+        AudioManager::getInstance().playGameSound(GameSound::BALL_WALL_BOUNCE);
     } else if (y + radius >= (float)screenH) {
         y = (float)screenH - radius;
         velY = -velY;
@@ -92,6 +96,9 @@ void Ball::update(double dt, int screenW, int screenH,
             isPiercing = true;
             wallBounceCount++;
         }
+        
+        // Play wall bounce sound
+        AudioManager::getInstance().playGameSound(GameSound::BALL_WALL_BOUNCE);
     }
 
     // Scoring: left/right bounds
@@ -99,12 +106,16 @@ void Ball::update(double dt, int screenW, int screenH,
         lastScoreX = 0.0f;
         lastScoreY = y;
         score2++;
+        // Play goal scored sound
+        AudioManager::getInstance().playGameSound(GameSound::BALL_GOAL_SCORED);
         reset(screenW * 0.5f, screenH * 0.5f);
         return;
     } else if (x - radius > (float)screenW) {
         lastScoreX = (float)screenW;
         lastScoreY = y;
         score1++;
+        // Play goal scored sound
+        AudioManager::getInstance().playGameSound(GameSound::BALL_GOAL_SCORED);
         reset(screenW * 0.5f, screenH * 0.5f);
         return;
     }
@@ -133,6 +144,9 @@ void Ball::update(double dt, int screenW, int screenH,
         rallyEnergy += 0.3f;
         if (rallyEnergy > 1.0f) rallyEnergy = 1.0f;
         leftImpactTimer = 0.12f;
+        
+        // Play ball hit sound
+        AudioManager::getInstance().playGameSound(GameSound::BALL_HIT_NORMAL);
 
         // Deal damage if ball was piercing (red ricochet) - Battle Mode only
         // Shield blocks piercing damage and adds speed boost
@@ -150,6 +164,8 @@ void Ball::update(double dt, int screenW, int screenH,
                 }
             } else if (health1 > 0) {
                 health1--;
+                // Play health loss sound
+                AudioManager::getInstance().playGameSound(GameSound::HEALTH_LOSS);
             }
         }
         isPiercing = false;
@@ -188,6 +204,9 @@ void Ball::update(double dt, int screenW, int screenH,
         rallyEnergy += 0.3f;
         if (rallyEnergy > 1.0f) rallyEnergy = 1.0f;
         rightImpactTimer = 0.12f;
+        
+        // Play ball hit sound
+        AudioManager::getInstance().playGameSound(GameSound::BALL_HIT_NORMAL);
 
         // Deal damage if ball was piercing (red ricochet) - Battle Mode only
         // Shield blocks piercing damage and adds speed boost
@@ -205,6 +224,8 @@ void Ball::update(double dt, int screenW, int screenH,
                 }
             } else if (health2 > 0) {
                 health2--;
+                // Play health loss sound
+                AudioManager::getInstance().playGameSound(GameSound::HEALTH_LOSS);
             }
         }
         isPiercing = false;

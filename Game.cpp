@@ -1064,6 +1064,12 @@ void Game::update(double dt) {
         boostActive1 = (p1WantsBoost && boostMeter1 > 0.0f);
     }
     
+    // Detect boost activation for sound
+    if (boostActive1 && !boostActive1Prev) {
+        AudioManager::getInstance().playGameSound(GameSound::BOOST_ACTIVATE);
+    }
+    boostActive1Prev = boostActive1;
+    
     // Drain boost meter while active
     if (boostActive1) {
         boostMeter1 -= BoostDrainRate * (float)dt;
@@ -1080,6 +1086,12 @@ void Game::update(double dt) {
         } else {
             boostActive2 = (p2WantsBoost && boostMeter2 > 0.0f);
         }
+        
+        // Detect boost activation for sound
+        if (boostActive2 && !boostActive2Prev) {
+            AudioManager::getInstance().playGameSound(GameSound::BOOST_ACTIVATE);
+        }
+        boostActive2Prev = boostActive2;
         
         if (boostActive2) {
             boostMeter2 -= BoostDrainRate * (float)dt;
@@ -1163,6 +1175,7 @@ void Game::update(double dt) {
                     held = true;
                     pickup.active = false;
                     AudioManager::getInstance().playUI(UISound::EQUIP);
+                    AudioManager::getInstance().playGameSound(GameSound::SHIELD_COLLECT);
                 }
             };
             checkCollect(shieldPickup1, paddle1, shieldHeld1);
@@ -1195,9 +1208,9 @@ void Game::update(double dt) {
                         if (activate) {
                             aiHeld = true;
                             // AI shield activation (quiet sound)
-                            AudioManager::getInstance().setUIVolume(AudioManager::getInstance().getUIVolume() / 2);
+                            AudioManager::getInstance().setUIVolume(AudioManager::getInstance().getUIVolume() * 0.5f);
                             AudioManager::getInstance().playUI(UISound::EQUIP);
-                            AudioManager::getInstance().setUIVolume(volumePercent * 128 / 100);
+                            AudioManager::getInstance().setUIVolume(volumePercent / 100.0f);
                         }
                     }
                 }
@@ -1620,6 +1633,8 @@ void Game::update(double dt) {
 
         if (lastAiWin) {
             loseShatterActive = true;
+            // Play lose shatter sound
+            AudioManager::getInstance().playGameSound(GameSound::LOSE_SHATTER);
 
             Paddle* losingPaddle = (lastWinner == 1) ? paddle2 : paddle1;
             if (losingPaddle) {
@@ -1680,6 +1695,8 @@ void Game::update(double dt) {
         } else {
             winDanceActive = true;
             winDanceTimer = 0.0;
+            // Play win dance sound
+            AudioManager::getInstance().playGameSound(GameSound::WIN_DANCE);
 
             Paddle* winner = (lastWinner == 1) ? paddle1 : paddle2;
             if (winner) {
@@ -1742,6 +1759,8 @@ void Game::update(double dt) {
 
             if (lastAiWin) {
                 loseShatterActive = true;
+                // Play lose shatter sound
+                AudioManager::getInstance().playGameSound(GameSound::LOSE_SHATTER);
 
                 Paddle* losingPaddle = (lastWinner == 1) ? paddle2 : paddle1;
                 if (losingPaddle) {
@@ -1815,6 +1834,8 @@ void Game::update(double dt) {
             } else {
                 winDanceActive = true;
                 winDanceTimer = 0.0;
+                // Play win dance sound
+                AudioManager::getInstance().playGameSound(GameSound::WIN_DANCE);
 
                 Paddle* winner = (lastWinner == 1) ? paddle1 : paddle2;
                 if (winner) {

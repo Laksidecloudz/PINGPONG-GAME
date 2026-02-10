@@ -1,7 +1,7 @@
 #pragma once
 #include "SDL3/SDL.h"
 #include "SDL3/SDL_opengl.h"
-#include "AudioManager_new.h"
+#include "AudioManager_Fixed.h"  // Fixed audio system with real output
 
 class Paddle;
 class Ball;
@@ -170,6 +170,8 @@ private:
     float boostMeter2 = 0.0f;
     bool boostActive1 = false;
     bool boostActive2 = false;
+    bool boostActive1Prev = false;  // Track previous state for sound triggers
+    bool boostActive2Prev = false;  // Track previous state for sound triggers
     bool autoBoostEnabled = false;
     static constexpr float BoostMultiplier = 1.6f;
     static constexpr float BoostDrainRate = 0.8f;

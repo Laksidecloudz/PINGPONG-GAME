@@ -1,5 +1,5 @@
 #pragma once
-#include "SDL3_mixer/SDL_mixer.h"
+#include "SDL2/SDL_mixer.h"
 #include <string>
 
 // UI Sound effects from SoupTonic UI1 SFX Pack
